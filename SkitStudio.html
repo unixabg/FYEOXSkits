@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<!--
+  FYEOXSkits — SkitStudio v0.5.0
+  Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg
+  GNU Affero General Public License v3 or later.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FYEOX SkitStudio</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useRef,useEffect}=React;
+const STUDIO_VERSION="0.5.0";
+const LS_LAST_SKIT="fyeox_last_skit_v3";
+const LS_CHAR_LIB="fyeox_char_lib_v3";
+
+
+const CAST=[];
+function makeCastMap(arr){const m={};arr.forEach(c=>{m[c.id]={...c};});return m;}
+
+const DEFAULT_SKIT={_type:"fyeox_skit",_version:STUDIO_VERSION,title:"New Skit",episode:1,version:1,characters:{},lines:[],audio:{}};
+
+let _ctx=null;
+const ac=()=>{if(!_ctx)_ctx=new(window.AudioContext||window.webkitAudioContext)();return _ctx;};
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function fart(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain(),l=c.createOscillator(),lg=c.createGain();l.frequency.value=13;lg.gain.value=30;l.connect(lg);lg.connect(o.frequency);o.type="sawtooth";o.frequency.setValueAtTime(88,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(38,c.currentTime+t+0.6);g.gain.setValueAtTime(0.45,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.7);o.connect(g);g.connect(c.destination);l.start(c.currentTime+t);o.start(c.currentTime+t);l.stop(c.currentTime+t+0.7);o.stop(c.currentTime+t+0.7);}
+function bark(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="square";o.frequency.setValueAtTime(470,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(195,c.currentTime+t+0.2);g.gain.setValueAtTime(0,c.currentTime+t);g.gain.linearRampToValueAtTime(0.28,c.currentTime+t+0.01);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.24);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.28);}
+function thump(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="sine";o.frequency.setValueAtTime(145,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(26,c.currentTime+t+0.15);g.gain.setValueAtTime(0.6,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.18);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.22);}
+function playAudio(url){return new Promise(r=>{if(!url){r();return;}const a=new Audio(url);a.onended=r;a.onerror=r;a.play().catch(r);});}
+function speakFallback(text,opts={}){return new Promise(r=>{if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=opts.pitch??1;u.rate=opts.rate??1;u.onend=r;u.onerror=()=>setTimeout(r,500);setTimeout(()=>window.speechSynthesis.speak(u),60);});}
+function blobToB64(blob){return new Promise(r=>{const fr=new FileReader();fr.onloadend=()=>r(fr.result);fr.readAsDataURL(blob);});}
+function b64ToUrl(b64){try{const arr=b64.split(","),mime=arr[0].match(/:(.*?);/)[1],bstr=atob(arr[1]),u8=new Uint8Array(bstr.length);for(let i=0;i<bstr.length;i++)u8[i]=bstr.charCodeAt(i);return URL.createObjectURL(new Blob([u8],{type:mime}));}catch(e){return null;}}
+function serializeSkit(title,episode,characters,lines,audioB64Map){
+  return JSON.stringify({_type:"fyeox_skit",_version:STUDIO_VERSION,title,episode,version:1,
+    created:new Date().toISOString().slice(0,10),characters,
+    lines:lines.map(l=>({id:l.id,char:l.char,text:l.text,mode:l.mode,bubble:l.bubble,tts:l.tts,
+      char_state:l.char_state,sfx_text:l.sfx_text,sounds:l.sounds,
+      effects_before:l.effects_before,effects_after:l.effects_after,
+      duration:l.duration,pre_delay:l.pre_delay,post_delay:l.post_delay,
+      params:l.params,recordable:l.recordable,color:l.color,emoji:l.emoji})),
+    audio:audioB64Map},null,2);
+}
+function parseSkit(json){
+  const d=JSON.parse(json);
+  if(d._type!=="fyeox_skit") throw new Error("Not a valid v0.4.0 .skit file (got type: "+d._type+")");
+  return {title:d.title||"Untitled",episode:d.episode||1,characters:d.characters||{},lines:d.lines||[],audio:d.audio||{}};
+}
+function serializeChar(charDef){
+  const traits=Array.isArray(charDef.traits)?charDef.traits:(charDef.traits||"").split(",").map(t=>t.trim()).filter(Boolean);
+  const quirks=Array.isArray(charDef.quirks)?charDef.quirks:(charDef.quirks||"").split(",").map(q=>q.trim()).filter(Boolean);
+  return JSON.stringify({_type:"fyeox_character",_version:STUDIO_VERSION,
+    id:charDef.id||(charDef.name||"char").toLowerCase().replace(/\s+/g,"_"),
+    name:charDef.name||"",emoji:charDef.emoji||"🎭",species:charDef.species||"Unknown",
+    color:charDef.color||"#888888",role:charDef.role||"Supporting",
+    traits,appearance:charDef.appearance||"",quirks,sounds:charDef.sounds||[],
+    bpos:charDef.bpos||{cx:270,cy:160,tailDir:"down-left"},
+    modes:charDef.modes||["idle"],animations:charDef.animations||[],
+    svg_component:charDef.svg_component||"",svg_avatar:charDef.svg_avatar||"",
+    author:"unixabg@gmail.com",created:new Date().toISOString().slice(0,10)},null,2);
+}
+function importChar(json){
+  const d=JSON.parse(json);
+  if(d._type!=="fyeox_character") throw new Error("Not a valid .char file");
+  try{const lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");lib[d.id]=d;localStorage.setItem(LS_CHAR_LIB,JSON.stringify(lib));}catch(e){}
+  return d;
+}
+function downloadFile(content,filename,type="text/plain"){
+  const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+function buildTar(files){
+  const enc=new TextEncoder();
+  function mkHeader(name,size){
+    const h=new Uint8Array(512);
+    function wrt(off,str,max){const b=enc.encode(str.slice(0,max));h.set(b,off);}
+    wrt(0,name,100);wrt(100,"0000644\0",8);wrt(108,"0000000\0",8);wrt(116,"0000000\0",8);
+    wrt(124,size.toString(8).padStart(11,"0")+"\0",12);
+    wrt(136,Math.floor(Date.now()/1000).toString(8).padStart(11,"0")+"\0",12);
+    h.fill(0x20,148,156);h[156]=0x30;wrt(257,"ustar ",6);wrt(263," \0",2);
+    let sum=0;for(let i=0;i<512;i++)sum+=h[i];wrt(148,sum.toString(8).padStart(6,"0")+"\0 ",8);return h;
+  }
+  const blocks=[];
+  for(const f of files){
+    const data=typeof f.content==="string"?enc.encode(f.content):f.content;
+    blocks.push(mkHeader(f.name,data.length));
+    const pad=new Uint8Array(Math.ceil(data.length/512)*512);pad.set(data);blocks.push(pad);
+  }
+  blocks.push(new Uint8Array(1024));
+  const total=blocks.reduce((s,b)=>s+b.length,0);
+  const out2=new Uint8Array(total);let off=0;
+  for(const b of blocks){out2.set(b,off);off+=b.length;}return out2;
+}
+function downloadTar(files,filename){
+  const blob=new Blob([buildTar(files)],{type:"application/x-tar"});
+  const url=URL.createObjectURL(blob);const a=document.createElement("a");
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+// Generate a new-skit AI prompt from current cast
+function buildNewSkitPrompt(castArr,currentTitle,concept=""){
+  const charDescs=castArr.map(c=>{
+    const traits=Array.isArray(c.traits)?c.traits.join(", "):c.traits;
+    const quirks=Array.isArray(c.quirks)?c.quirks.join("; "):c.quirks;
+    const modeStr=(c.modes||[]).join(" · ");
+    const isVehicle=(c.role||"").toLowerCase().includes("vehicle")||(c.species||"").toLowerCase().includes("car")||(c.species||"").toLowerCase().includes("truck")||(c.species||"").toLowerCase().includes("cougar");
+    const note=isVehicle?"\n  Note: Vehicle — use transition beats {char,mode} to change mode, not dialogue beats":"";
+    return c.emoji+" "+c.name+" ("+c.species+", "+c.role+")\n  ID: "+c.id+"\n  Traits: "+traits+"\n  Appearance: "+c.appearance+"\n  Quirks: "+quirks+"\n  Sounds: "+(c.sounds||[]).join(", ")+"\n  Modes: "+modeStr+note;
+  }).join("\n\n");
+  return "Write a short cartoon skit for the FYEOX Skit Studio app (v0.5.0).\n\n"
+    +"== CAST ==\n"+charDescs+"\n\n"
+    +(concept.trim()?"== STORY CONCEPT ==\n"+concept.trim()+"\n\n":"")
+    +"== FORMAT ==\n"
+    +"Return a JSON array of line objects. Each line uses one of these shapes:\n\n"
+    +"Dialogue beat (recordable):\n"
+    +'  {"id":"unique_id","char":"<cast_id>","text":"<spoken line>","mode":"<mode>","bubble":"speech|bark|thought","tts":{"pitch":1.0,"rate":1.0},"recordable":true}\n\n'
+    +"Transition beat (non-recordable):\n"
+    +'  {"id":"unique_id","char":"<cast_id>","char_state":"<state>","duration":800}\n\n'
+    +"SFX-only beat:\n"
+    +'  {"id":"unique_id","sfx_text":"*sound description*","duration":600}\n\n'
+    +"Effects fields (optional on any beat):\n"
+    +'  "effects_before":["gas_on","sfx:TEXT","sound:fart|bark|thump"]\n'
+    +'  "effects_after":["gas_off"]\n'
+    +'  "sounds":["bark","bark"] (procedural audio)\n\n'
+    +"== RULES ==\n"
+    +"- Montie never speaks words; use bubble:bark/thought and short sounds (grrrr, WOOF, * huff *)\n"
+    +"- Bobby flatulates at a key dramatic moment\n"
+    +"- FenderBender uses mode:cane when angry/animated\n"
+    +"- Include bobby char_state transitions: hidden -> emerging -> visible -> fleeing -> hidden\n"
+    +"- 8-14 total beats; 6-8 recordable\n"
+    +"- Be funny, punchy, family-friendly\n\n"
+    +"== SKIT TITLE ==\n"+(currentTitle||"New FYEOX Skit")+"\n\n"
+    +"Return ONLY the JSON array, no markdown, no explanation.";
+}
+
+const _avCache={};
+function clearAvCache(){Object.keys(_avCache).forEach(k=>delete _avCache[k]);}
+function getAvatar(charId){
+  if(!_avCache[charId]){
+    try{
+      const lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");
+      const ch=lib[charId];
+      if(ch&&ch.svg_avatar){const code=Babel.transform("("+ch.svg_avatar+")",{presets:["react"]}).code;_avCache[charId]=eval(code);}
+    }catch(e){}
+  }
+  const Comp=_avCache[charId];
+  if(Comp)return <Comp/>;
+  try{const lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");const ch=lib[charId];if(ch)return <span style={{fontSize:22}}>{ch.emoji||"🎭"}</span>;}catch(e){}
+  return <span style={{fontSize:22}}>🎭</span>;
+}
+function SceneBG(){return(<><defs><linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4A90C4"/><stop offset="100%" stopColor="#87CEEB"/></linearGradient><linearGradient id="wd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#C8914A"/><stop offset="100%" stopColor="#A8711A"/></linearGradient></defs><rect width="540" height="320" fill="url(#sk)"/><g opacity="0.9"><ellipse cx="75" cy="48" rx="42" ry="20" fill="white"/><ellipse cx="52" cy="56" rx="26" ry="17" fill="white"/><ellipse cx="106" cy="56" rx="30" ry="17" fill="white"/></g><g opacity="0.85"><ellipse cx="400" cy="38" rx="36" ry="17" fill="white"/><ellipse cx="377" cy="46" rx="23" ry="14" fill="white"/><ellipse cx="428" cy="46" rx="27" ry="14" fill="white"/></g><rect x="0" y="55" width="430" height="200" fill="#E8D5A2"/>{[70,84,98,112,126,140,154,168,182,196,210,224,238].map(y=><line key={y} x1="0" y1={y} x2="430" y2={y} stroke="#D2BD8A" strokeWidth="1"/>)}<rect x="55" y="90" width="75" height="58" rx="3" fill="#A8C8E0" stroke="#7A5A14" strokeWidth="3"/><line x1="55" y1="119" x2="130" y2="119" stroke="#7A5A14" strokeWidth="2"/><line x1="92" y1="90" x2="92" y2="148" stroke="#7A5A14" strokeWidth="2"/><rect x="14" y="55" width="22" height="210" rx="4" fill="#D4A85A" stroke="#7A5A14" strokeWidth="2.5"/><rect x="9" y="55" width="32" height="12" rx="3" fill="#C08830" stroke="#7A5A14" strokeWidth="2"/>{[370,418,468].map((x,i)=><g key={i}><rect x={x} y={140+i*8} width={18} height={65} fill="#5A3A10"/><ellipse cx={x+9} cy={135+i*8} rx={26} ry={32} fill={i%2===0?"#2A6A2A":"#3A8A3A"}/></g>)}<rect x="0" y="195" width="540" height="55" fill="#52922A"/><rect x="0" y="195" width="540" height="10" fill="#62A23A"/><rect x="0" y="240" width="540" height="100" fill="url(#wd)"/>{[0,45,90,135,180,225,270,315,360,405,450,495].map(x=><line key={x} x1={x} y1="240" x2={x} y2="340" stroke="#8A5510" strokeWidth="1.5"/>)}<rect x="0" y="240" width="540" height="9" fill="#8A5510"/><rect x="0" y="212" width="540" height="10" rx="3" fill="#D4A85A" stroke="#7A5A14" strokeWidth="2"/><rect x="0" y="232" width="540" height="9" rx="3" fill="#D4A85A" stroke="#7A5A14" strokeWidth="2"/>{Array.from({length:27},(_,i)=>i*20+2).map(x=><rect key={x} x={x} y="221" width="8" height="12" rx="2" fill="#D4A85A" stroke="#7A5A14" strokeWidth="1"/>)}</>);}
+function Bush(){return(<g><ellipse cx="455" cy="222" rx="58" ry="36" fill="#2A6A2A" stroke="#184A18" strokeWidth="2"/><ellipse cx="418" cy="230" rx="36" ry="28" fill="#3A8A3A" stroke="#184A18" strokeWidth="2"/><ellipse cx="490" cy="226" rx="33" ry="26" fill="#2A6A2A" stroke="#184A18" strokeWidth="2"/><ellipse cx="454" cy="205" rx="30" ry="22" fill="#3A8A3A" stroke="#184A18" strokeWidth="1.5"/><circle cx="438" cy="210" r="4" fill="#CC2200"/><circle cx="462" cy="204" r="3.5" fill="#CC2200"/><circle cx="474" cy="216" r="3" fill="#CC2200"/></g>);}
+function GasCloud(){return(<g style={{animation:"gasPulse 0.4s ease-in-out infinite alternate"}}><ellipse cx="385" cy="210" rx="42" ry="26" fill="rgba(100,200,60,0.52)" stroke="rgba(50,150,20,0.7)" strokeWidth="2"/><ellipse cx="358" cy="220" rx="27" ry="18" fill="rgba(100,200,60,0.46)"/><ellipse cx="412" cy="217" rx="24" ry="16" fill="rgba(100,200,60,0.46)"/><text x="385" y="216" textAnchor="middle" fontSize="24">💨</text></g>);}
+function Bubble({cx,cy,text,type,tailDir}){
+  const ls=text.split("\n"),bw=Math.max(...ls.map(l=>l.length))*7.5+32,bh=ls.length*20+18,bx=cx-bw/2,by=cy-bh/2;
+  if(type==="bark"){const pts=[];for(let i=0;i<8;i++){const a1=(i/8)*Math.PI*2,a2=((i+0.5)/8)*Math.PI*2;pts.push(`${cx+Math.cos(a1)*(bw/2+13)},${cy+Math.sin(a1)*(bh/2+11)}`);pts.push(`${cx+Math.cos(a2)*(bw/2)},${cy+Math.sin(a2)*(bh/2)}`);}return(<g style={{animation:"popIn .15s ease-out"}}><polygon points={pts.join(" ")} fill="#FFE900" stroke="#000" strokeWidth="3"/><ellipse cx={cx} cy={cy} rx={bw/2} ry={bh/2} fill="#FFE900" stroke="#000" strokeWidth="2.5"/>{ls.map((l,i)=><text key={i} x={cx} y={cy+(i-(ls.length-1)/2)*20+5} textAnchor="middle" fontSize="15" fill="#CC0000" fontFamily="'Comic Sans MS',cursive" fontWeight="bold">{l}</text>)}</g>);}
+  if(type==="thought"){return(<g style={{animation:"bubbleFade .25s ease-out"}}><ellipse cx={cx} cy={cy} rx={bw/2} ry={bh/2} fill="white" stroke="#AAA" strokeWidth="2" strokeDasharray="5,3"/>{ls.map((l,i)=><text key={i} x={cx} y={cy+(i-(ls.length-1)/2)*20+5} textAnchor="middle" fontSize="12" fill="#555" fontFamily="'Comic Sans MS',cursive" fontStyle="italic">{l}</text>)}<circle cx={cx-bw/2+10} cy={cy+bh/2+8} r="5" fill="white" stroke="#AAA" strokeWidth="1.5"/><circle cx={cx-bw/2+4} cy={cy+bh/2+18} r="3" fill="white" stroke="#AAA" strokeWidth="1.5"/></g>);}
+  return(<g style={{animation:"bubbleFade .22s ease-out"}}><rect x={bx} y={by} width={bw} height={bh} rx="12" fill="white" stroke="#000" strokeWidth="3"/>{ls.map((l,i)=><text key={i} x={cx} y={by+14+i*20+(bh-ls.length*20)/2} textAnchor="middle" fontSize="13" fill="#000" fontFamily="'Comic Sans MS',cursive" fontWeight="bold">{l}</text>)}</g>);
+}
+function SFXText({text}){return <text x="270" y="72" textAnchor="middle" fontSize="26" fill="#CC0000" fontFamily="'Comic Sans MS',cursive" fontWeight="bold" stroke="white" strokeWidth="5" paintOrder="stroke" style={{animation:"popIn .18s ease-out"}}>{text}</text>;}
+const DEFAULT_BPOS={};  // populated per-skit from character bpos fields
+const INP={background:"#080C16",color:"#C8CAD8",border:"1.5px solid #2A2D44",borderRadius:6,padding:"5px 8px",fontSize:11,fontFamily:"'Comic Sans MS',cursive",outline:"none",width:"100%",display:"block"};
+
+// ── v0.5.0: Beat Builder helpers ────────────────────────────────────────────
+// DurationInput: local draft string so user can freely retype without snapping
+function DurationInput({duration,onCommit}){
+  const [draft,setDraft]=React.useState(String(duration));
+  // Keep draft in sync if duration changes externally (e.g. beat type switch)
+  React.useEffect(()=>{setDraft(String(duration));},[duration]);
+  function handleChange(e){
+    const val=e.target.value;
+    setDraft(val);
+    // Commit immediately on every valid keystroke so state is always current
+    // (blur-only commit causes race: clicking Play before blur -> stale lines)
+    const ms=parseInt(val,10);
+    if(!isNaN(ms)&&ms>=50)onCommit(ms);
+  }
+  // On blur, revert display to last committed value if field left invalid
+  function handleBlur(){
+    const ms=parseInt(draft,10);
+    if(isNaN(ms)||ms<50)setDraft(String(duration));
+  }
+  function handleKey(e){if(e.key==="Enter")e.target.blur();}
+  return(
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <span style={{fontSize:10,color:"#556",flexShrink:0}}>⏱ duration:</span>
+      <input type="number" min="50" step="100" value={draft}
+        onChange={handleChange} onBlur={handleBlur} onKeyDown={handleKey}
+        style={{width:80,background:"#080C16",color:"#8ABACC",border:"1.5px solid #2A3A50",borderRadius:5,padding:"3px 6px",fontSize:11,fontFamily:"monospace",outline:"none"}}/>
+      <span style={{fontSize:10,color:"#334"}}>ms</span>
+    </div>
+  );
+}
+function genBeatId(char,mode,idx){
+  const parts=[char,mode].filter(Boolean);
+  return(parts.length?parts.join("_"):"beat")+"_"+idx;
+}
+function makeBeat(idx){
+  return{id:"beat_"+idx,char:"",mode:"",recordable:false,duration:1000,
+    text:"",bubble:"speech",tts:{pitch:1.0,rate:1.0},
+    effects_before:[],effects_after:[],sounds:[],params:{},_new:true};
+}
+function beatType(line){
+  if(line.recordable)return"dialogue";
+  if(!line.char)return line._new?"transition":"sfx";
+  return"transition";
+}
+
+function BeatCard({line,idx,isFirst,isLast,skitChars,
+  onModeChange,onParamsChange,onDelete,onMoveUp,onMoveDown,
+  onCharChange,onTypeChange,onDurationChange,onSfxTextChange}){
+  const type=beatType(line);
+  const charIds=Object.keys(skitChars||{});
+  const modes=(line.char&&skitChars[line.char]?.modes)||[];
+  const [draft,setDraft]=useState(()=>line.params&&Object.keys(line.params).length?JSON.stringify(line.params):"");
+  const [err,setErr]=useState(false);
+  function handleParams(val){
+    setDraft(val);
+    if(!val.trim()){setErr(false);onParamsChange(line.id,undefined);return;}
+    try{const p=JSON.parse(val);setErr(false);onParamsChange(line.id,p);}catch(e){setErr(true);}
+  }
+  const miniBtn=(active,col,onClick,children,disabled)=>(
+    <button className="btn" disabled={disabled} onClick={onClick}
+      style={{padding:"2px 7px",fontSize:10,borderRadius:4,
+        background:active?col+"22":"#0A0E1A",color:active?col:"#445",
+        border:"1px solid "+(active?col:"#2A2D44"),opacity:disabled?0.35:1}}>
+      {children}
+    </button>
+  );
+  return(
+    <div style={{background:"#0A0D18",border:"2px dashed #252840",borderRadius:10,padding:"8px 12px",display:"flex",flexDirection:"column",gap:6}}>
+      {/* top row: type toggle + reorder + delete */}
+      <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+        {miniBtn(type==="dialogue","#2ECC71",()=>onTypeChange(line.id,"dialogue"),"💬 Dialogue",false)}
+        {miniBtn(type==="transition","#8ABACC",()=>onTypeChange(line.id,"transition"),"🔄 Transition",false)}
+        {miniBtn(type==="sfx","#FFE900",()=>onTypeChange(line.id,"sfx"),"🔊 SFX",false)}
+        <div style={{flex:1}}/>
+        <button className="btn" disabled={isFirst} onClick={()=>onMoveUp(line.id)}
+          style={{padding:"2px 7px",fontSize:11,background:"#0A0E1A",color:isFirst?"#222":"#8ABACC",border:"1px solid #2A2D44",opacity:isFirst?0.35:1}}>▲</button>
+        <button className="btn" disabled={isLast} onClick={()=>onMoveDown(line.id)}
+          style={{padding:"2px 7px",fontSize:11,background:"#0A0E1A",color:isLast?"#222":"#8ABACC",border:"1px solid #2A2D44",opacity:isLast?0.35:1}}>▼</button>
+        <button className="btn" onClick={()=>onDelete(line.id)}
+          style={{padding:"2px 7px",fontSize:11,background:"#2A0A0A",color:"#FF6666",border:"1px solid #661111"}}>✕</button>
+      </div>
+      {/* char + mode row (transition / dialogue — not sfx) */}
+      {type!=="sfx"&&(
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          {getAvatar(line.char)}
+          <select value={line.char||""} onChange={e=>onCharChange(line.id,e.target.value)}
+            style={{background:"#1A2838",color:"#8ABACC",border:"1px solid #2A3A50",borderRadius:4,padding:"2px 6px",fontSize:10,fontFamily:"'Comic Sans MS',cursive",outline:"none",cursor:"pointer"}}>
+            <option value="">— char —</option>
+            {charIds.map(id=><option key={id} value={id}>{skitChars[id]?.emoji||"🎭"} {skitChars[id]?.name||id}</option>)}
+          </select>
+          {modes.length>0&&(
+            <select value={line.mode||""} onChange={e=>onModeChange(line.id,e.target.value)}
+              style={{background:"#1A2838",color:"#8ABACC",border:"1px solid #2A3A50",borderRadius:4,padding:"2px 6px",fontSize:10,fontFamily:"'Comic Sans MS',cursive",outline:"none",cursor:"pointer"}}>
+              {modes.map(m=><option key={m} value={m}>{m}</option>)}
+            </select>
+          )}
+        </div>
+      )}
+      {/* sfx_text input (sfx only) */}
+      {type==="sfx"&&(
+        <input value={line.sfx_text||""} onChange={e=>onSfxTextChange(line.id,e.target.value)}
+          placeholder="*SFX description*"
+          style={{background:"#080C16",color:"#FFE900",border:"1.5px solid #8A6600",borderRadius:5,padding:"3px 8px",fontSize:11,fontFamily:"'Comic Sans MS',cursive",outline:"none"}}/>
+      )}
+      {/* duration input (transition + sfx) */}
+      {type!=="dialogue"&&(
+        <DurationInput duration={line.duration||1000} onCommit={ms=>onDurationChange(line.id,ms)}/>
+      )}
+      {/* pos_x + params (transition with char) */}
+      {type==="transition"&&line.char&&(
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:10,color:"#445",flexShrink:0,width:52}}>📍 pos_x:</span>
+            <input type="range" min="-300" max="300"
+              value={(line.params&&line.params.pos_x!=null)?line.params.pos_x:0}
+              onChange={e=>{const p={...(line.params||{}),pos_x:Number(e.target.value)};onParamsChange(line.id,p);}}
+              style={{flex:1,accentColor:"#FFE900"}}/>
+            <input type="number"
+              value={(line.params&&line.params.pos_x!=null)?line.params.pos_x:0}
+              onChange={e=>{const p={...(line.params||{}),pos_x:Number(e.target.value)};onParamsChange(line.id,p);}}
+              style={{width:56,background:"#080C16",color:"#FFE900",border:"1.5px solid #2A3A50",borderRadius:5,padding:"2px 5px",fontSize:11,fontFamily:"monospace",outline:"none"}}/>
+            <span style={{fontSize:9,color:"#334"}}>px</span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:10,color:"#445",flexShrink:0,width:52}}>params:</span>
+            <input value={draft} onChange={e=>handleParams(e.target.value)} placeholder="{}"
+              style={{flex:1,background:"#080C16",color:err?"#FF6666":"#FFE900",border:"1.5px solid "+(err?"#882200":"#2A3A50"),borderRadius:5,padding:"3px 7px",fontSize:11,fontFamily:"monospace",outline:"none",minWidth:0}}/>
+            {err&&<span style={{fontSize:9,color:"#FF6666",flexShrink:0}}>invalid JSON</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function LineCard({line,index,origText,recordings,recording,recTime,startRec,stopRec,clearRec,onPreview,onTextChange,onReset,isFirst,isLast,onDelete,onMoveUp,onMoveDown,onTypeChange}){
+  const [editing,setEditing]=useState(false);const [draft,setDraft]=useState(line.text);const taRef=useRef(null);
+  const isRec=recording===line.id,hasRec=!!recordings[line.id],isEdited=line.text!==origText;
+  function openEdit(){if(isRec)return;setDraft(line.text);setEditing(true);setTimeout(()=>taRef.current?.focus(),40);}
+  function saveEdit(){if(draft.trim())onTextChange(line.id,draft.trim());setEditing(false);}
+  return(
+    <div style={{background:hasRec?"#0A1A0A":"#16182A",border:"2px solid "+(isRec?"#FF4444":editing?"#FFE900":hasRec?"#2ECC71":"#2A2D44"),borderRadius:10,padding:"10px 12px",animation:isRec?"recPulse 1s ease-in-out infinite":"none"}}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+        {getAvatar(line.char)}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,flexWrap:"wrap"}}>
+            <span style={{color:line.color,fontSize:11,fontWeight:"bold"}}>{line.emoji} {line.char} &mdash; Line {index+1}</span>
+            {isEdited&&<span style={{fontSize:9,color:"#FFE900",background:"#2A1A00",borderRadius:4,padding:"1px 5px",border:"1px solid #554400"}}>edited</span>}
+            <div style={{flex:1}}/>
+            <button className="btn" onClick={()=>onTypeChange(line.id,"transition")} title="Convert to transition beat"
+              style={{padding:"1px 6px",fontSize:9,background:"#0A1020",color:"#6A8AB0",border:"1px solid #2A3A50"}}>🔄</button>
+            <button className="btn" disabled={isFirst} onClick={()=>onMoveUp(line.id)}
+              style={{padding:"1px 6px",fontSize:10,background:"#0A0E1A",color:isFirst?"#222":"#8ABACC",border:"1px solid #2A2D44",opacity:isFirst?0.35:1}}>▲</button>
+            <button className="btn" disabled={isLast} onClick={()=>onMoveDown(line.id)}
+              style={{padding:"1px 6px",fontSize:10,background:"#0A0E1A",color:isLast?"#222":"#8ABACC",border:"1px solid #2A2D44",opacity:isLast?0.35:1}}>▼</button>
+            <button className="btn" onClick={()=>onDelete(line.id)}
+              style={{padding:"1px 6px",fontSize:10,background:"#2A0A0A",color:"#FF6666",border:"1px solid #661111"}}>✕</button>
+          </div>
+          {editing?(
+            <div>
+              <textarea ref={taRef} value={draft} rows={3} onChange={e=>setDraft(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();saveEdit();}if(e.key==="Escape")setEditing(false);}}
+                style={{width:"100%",boxSizing:"border-box",background:"#080C16",color:"#FFE900",border:"2px solid #FFE900",borderRadius:6,padding:"6px 8px",fontSize:12,fontFamily:"'Comic Sans MS',cursive",lineHeight:1.5,resize:"vertical",outline:"none"}}/>
+              <div style={{display:"flex",gap:6,marginTop:5,flexWrap:"wrap"}}>
+                <button className="btn" onClick={saveEdit} style={{padding:"4px 12px",fontSize:11,background:"#FFE900",color:"#1A1A00",border:"2px solid #AA9900",boxShadow:"2px 2px 0 #000"}}>&#10003; Save</button>
+                <button className="btn" onClick={()=>setEditing(false)} style={{padding:"4px 10px",fontSize:11,background:"#2A2A3A",color:"#AAA",border:"2px solid #444"}}>&#10005; Cancel</button>
+                {isEdited&&<button className="btn" onClick={()=>{onReset(line.id);setEditing(false);}} style={{padding:"4px 10px",fontSize:11,background:"#1A0A00",color:"#FF9944",border:"2px solid #442200"}}>&#8634; Original</button>}
+              </div>
+            </div>
+          ):(
+            <div onClick={openEdit} title={isRec?"":"Click to edit"}
+              style={{color:"#C8CAD8",fontSize:12,fontStyle:"italic",background:"rgba(255,255,255,0.04)",borderRadius:6,padding:"5px 28px 5px 8px",lineHeight:1.5,cursor:isRec?"default":"text",border:"1px dashed transparent",position:"relative"}}
+              onMouseEnter={e=>{if(!isRec){e.currentTarget.style.borderColor="#3A3D55";e.currentTarget.style.background="rgba(255,255,255,0.07)";}}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent";e.currentTarget.style.background="rgba(255,255,255,0.04)";}}>
+              "{line.text}"
+              {!isRec&&<span style={{position:"absolute",right:7,top:"50%",transform:"translateY(-50%)",fontSize:11,opacity:0.4}}>&#9998;</span>}
+            </div>
+          )}
+        </div>
+      </div>
+      {!editing&&(
+        <div style={{display:"flex",gap:7,alignItems:"center",marginTop:8,flexWrap:"wrap"}}>
+          {!isRec?(
+            <button className="btn" onClick={()=>startRec(line.id)} disabled={!!recording&&!isRec}
+              style={{padding:"6px 14px",fontSize:12,background:hasRec?"#0A2A0A":"#550000",color:(!!recording&&!isRec)?"#444":"white",border:"2px solid "+(hasRec?"#2ECC71":"#CC0000"),boxShadow:"2px 2px 0 #000"}}>
+              {hasRec?"🔴 Re-record":"🔴 Record"}
+            </button>
+          ):(
+            <button className="btn" onClick={stopRec} style={{padding:"6px 14px",fontSize:12,background:"#CC0000",color:"white",border:"2px solid #FF4444",boxShadow:"2px 2px 0 #000",animation:"stopBlink .5s infinite"}}>&#9209; Stop {recTime}s</button>
+          )}
+          {hasRec&&<>
+            <button className="btn" onClick={()=>onPreview(recordings[line.id])} style={{padding:"6px 12px",fontSize:12,background:"#0A1A3A",color:"#7ABAFF",border:"2px solid #2255AA",boxShadow:"2px 2px 0 #000"}}>&#9654; Preview</button>
+            <button className="btn" onClick={()=>clearRec(line.id)} style={{padding:"6px 10px",fontSize:11,background:"#1A0A0A",color:"#FF8888",border:"2px solid #441111",boxShadow:"2px 2px 0 #000"}}>&#10005; Clear</button>
+            <span style={{fontSize:10,color:"#2ECC71"}}>&#10003; Recorded</span>
+          </>}
+          {isRec&&<div style={{display:"flex",gap:3,alignItems:"center"}}>{[0,1,2,3,4].map(i=><div key={i} style={{width:3,background:"#FF4444",borderRadius:2,animation:"vu "+(0.3+i*0.1)+"s ease-in-out infinite alternate",animationDelay:(i*0.07)+"s"}}/>)}<span style={{color:"#FF4444",fontSize:10,marginLeft:4}}>RECORDING...</span></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Welcome screen — Load only. No "New Skit" until a skit has been loaded.
+function WelcomeScreen({onLoad,hasSession,onResume,onStartBlank}){
+  const S={fontFamily:"'Comic Sans MS',cursive"};
+  return(
+    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at top,#1a2838,#0d1520)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,...S}}>
+      <div style={{fontSize:28,fontWeight:"bold",color:"#FFE900",textShadow:"4px 4px 0 #8B0000",marginBottom:6,textAlign:"center",letterSpacing:2}}>🎭 FYEOX Skit Studio</div>
+      <div style={{fontSize:13,color:"#8ABACC",fontStyle:"italic",marginBottom:28,textAlign:"center"}}>Helping bring your ideas to skit.</div>
+      <div style={{display:"flex",flexDirection:"column",gap:12,alignItems:"center",width:"100%",maxWidth:320}}>
+        <button className="btn" onClick={onStartBlank} style={{padding:"13px 0",fontSize:16,background:"#0A1A0A",color:"#2ECC71",border:"3px solid #2ECC71",borderRadius:12,boxShadow:"4px 4px 0 #000",width:"100%"}}>✨ Start Blank Skit</button>
+        <button className="btn" onClick={onLoad} style={{padding:"13px 0",fontSize:16,background:"#0A1A3A",color:"#7ABAFF",border:"3px solid #2255AA",borderRadius:12,boxShadow:"4px 4px 0 #000",width:"100%"}}>📂 Load Existing Skit</button>
+        {hasSession&&<button className="btn" onClick={onResume} style={{padding:"13px 0",fontSize:15,background:"#1A1A2A",color:"#8ABACC",border:"2px solid #2A2D44",borderRadius:12,boxShadow:"3px 3px 0 #000",width:"100%"}}>↩ Resume Last Session</button>}
+      </div>
+      <div style={{marginTop:32,fontSize:11,textAlign:"center"}}><span style={{color:"#FFE900",fontWeight:"bold"}}>v{STUDIO_VERSION}</span><a href={"https://github.com/unixabg/FYEOXSkits/"} target="_blank" rel="noreferrer" style={{color:"#FFE900",textDecoration:"none",marginLeft:3}} title="Project page on GitHub">↗</a><span style={{color:"#8ABACC"}}> &nbsp;&bull;&nbsp; FYEOX Skit Studio &nbsp;&bull;&nbsp; fyeox.com &nbsp;&bull;&nbsp; AGPL-3.0</span></div>
+    </div>
+  );
+}
+
+
+// New Skit modal — generates an AI prompt with selectable cast.
+function NewSkitModal({castArr,currentTitle,onConfirm,onCancel,onSavePrompt}){
+  const allChars=React.useMemo(()=>{let imp=[];try{imp=Object.values(JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}"));}catch(e){}return[...castArr,...imp];},[]);
+  const [title,setTitle]=React.useState("New FYEOX Skit");
+  const [concept,setConcept]=React.useState("");
+  const [copied,setCopied]=React.useState(false);
+  const [sel,setSel]=React.useState(()=>new Set(allChars.map(c=>c.id)));
+  function toggleChar(id){setSel(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});}
+  const selectedChars=allChars.filter(c=>sel.has(c.id));
+  const prompt=buildNewSkitPrompt(selectedChars,title,concept);
+  function doCopy(){navigator.clipboard.writeText(prompt).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2200);}).catch(()=>{});}
+  function doDownloadPrompt(){downloadFile(prompt,"fyeox_new_skit_prompt.txt","text/plain");}
+  const chipStyle=(c)=>({
+    display:"flex",alignItems:"center",gap:5,padding:"5px 10px",
+    borderRadius:20,cursor:"pointer",userSelect:"none",fontSize:12,fontWeight:"bold",
+    transition:"all 0.12s",
+    background:sel.has(c.id)?(c.color||"#FFE900")+"22":"#0A0E1A",
+    color:sel.has(c.id)?(c.color||"#FFE900"):"#445",
+    border:"2px solid "+(sel.has(c.id)?(c.color||"#FFE900"):"#2A2D44"),
+    opacity:sel.has(c.id)?1:0.5,
+  });
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}}>
+      <div style={{background:"#1A2838",border:"3px solid #FFE900",borderRadius:14,boxShadow:"8px 8px 0 #000",padding:20,width:"100%",maxWidth:540,maxHeight:"90vh",display:"flex",flexDirection:"column",gap:12,animation:"modalSlide .25s ease-out",fontFamily:"'Comic Sans MS',cursive"}}>
+        <div style={{color:"#FFE900",fontWeight:"bold",fontSize:18,textAlign:"center"}}>✨ New Skit</div>
+        <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="New skit title..."
+          style={{background:"#080C16",color:"#FFE900",border:"2px solid #FFE900",borderRadius:8,padding:"8px 12px",fontSize:14,fontFamily:"'Comic Sans MS',cursive",fontWeight:"bold",outline:"none"}}/>
+        <div>
+          <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>🎭 Characters in prompt — tap to toggle:</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {allChars.map(c=>(
+              <div key={c.id} style={chipStyle(c)} onClick={()=>toggleChar(c.id)}>
+                <span>{c.emoji||"🎭"}</span>
+                <span>{c.name}</span>
+                {!sel.has(c.id)&&<span style={{fontSize:9,color:"#556"}}>✕</span>}
+              </div>
+            ))}
+          </div>
+          {selectedChars.length===0&&<div style={{fontSize:10,color:"#FF6666",marginTop:4}}>⚠ Select at least one character.</div>}
+        </div>
+        <div>
+          <div style={{fontSize:10,color:"#8ABACC",marginBottom:5}}>✏️ Story concept — describe what happens (optional but really helps):</div>
+          <textarea value={concept} onChange={e=>setConcept(e.target.value)}
+            placeholder="e.g. FenderBender and Montie do a burnout contest against a police car in a parade..."
+            rows={3}
+            style={{width:"100%",background:"#080C16",color:"#C8CAD8",border:"1.5px solid #2A2D44",borderRadius:6,padding:"6px 8px",fontSize:11,fontFamily:"'Comic Sans MS',cursive",outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
+        </div>
+        <div style={{background:"#080C16",border:"1px solid #2A2D44",borderRadius:8,padding:"10px 12px",fontSize:10,color:"#7A9AAA",lineHeight:1.6,overflowY:"auto",maxHeight:180,whiteSpace:"pre-wrap",fontFamily:"monospace"}}>{prompt}</div>
+        <div style={{fontSize:10,color:"#556",textAlign:"center"}}>
+          {selectedChars.length} character{selectedChars.length!==1?"s":""} selected · Paste prompt into Claude or your AI, then load the returned lines as a .skit file.
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
+          <button className="btn" onClick={doCopy} disabled={selectedChars.length===0} style={{padding:"9px 18px",fontSize:13,background:copied?"#0A2A0A":"#0A1A3A",color:copied?"#2ECC71":"#7ABAFF",border:"2px solid "+(copied?"#2ECC71":"#2255AA"),boxShadow:"3px 3px 0 #000"}}>
+            {copied?"✓ Copied!":"📋 Copy Prompt"}
+          </button>
+          <button className="btn" onClick={doDownloadPrompt} disabled={selectedChars.length===0} style={{padding:"9px 16px",fontSize:13,background:"#1A1A2A",color:"#8ABACC",border:"2px solid #2A2D44",boxShadow:"3px 3px 0 #000"}}>
+            ⬇ Save .txt
+          </button>
+          <button className="btn" onClick={onConfirm} style={{padding:"9px 16px",fontSize:13,background:"#2A0A0A",color:"#FF8888",border:"2px solid #661111",boxShadow:"3px 3px 0 #000"}}>
+            🗑 Clear &amp; Start Fresh
+          </button>
+          <button className="btn" onClick={onCancel} style={{padding:"9px 16px",fontSize:13,background:"#111",color:"#556",border:"2px solid #2A2D44"}}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function CharactersTab({showToast,onLibChange}){
+  const readLib=()=>{try{return Object.values(JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}"));}catch(e){return [];}};
+  const [importedChars,setImportedChars]=useState(readLib);
+  function refreshLib(){setImportedChars(readLib());}
+  function deleteImported(id){try{const lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");delete lib[id];localStorage.setItem(LS_CHAR_LIB,JSON.stringify(lib));clearAvCache();refreshLib();if(onLibChange)onLibChange();showToast("🗑 Removed","#FF6666");}catch(e){}}
+  function getImportedAvatar(c){if(!c.svg_avatar)return React.createElement("span",{style:{fontSize:22}},c.emoji||"🎭");try{const code=Babel.transform("("+c.svg_avatar+")",{presets:["react"]}).code;const Comp=eval(code);return React.createElement(Comp);}catch(e){return React.createElement("span",{style:{fontSize:22}},c.emoji||"🎭");}}
+  function doImportChar(){
+    const inp=document.createElement("input");inp.type="file";inp.accept=".char,.json";
+    inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=importChar(ev.target.result);clearAvCache();showToast("🎭 "+d.name+" imported!","#2ECC71");refreshLib();if(onLibChange)onLibChange();}catch(err){alert("Could not import .char file.\n"+err.message);}};reader.readAsText(file);};inp.click();
+  }
+  function doBundle(){
+    const LIC="GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n\nCopyright (C) 2025 unixabg@gmail.com\nhttps://fyeox.com | https://github.com/unixabg\n\nFull text: https://www.gnu.org/licenses/agpl-3.0.html\n";
+    const README="# FYEOXSkits — SkitStudio v"+STUDIO_VERSION+"\n\nHelping bring your ideas to skit.\n\nOpen SkitStudio.html in any modern browser. No install required.\n\n- Website: https://fyeox.com\n- Repo: https://github.com/unixabg/FYEOXSkits\n- License: AGPL-3.0\n";
+    const files=[{name:"LICENSE",content:LIC},{name:"README.md",content:README},...CAST.map(c=>({name:"characters/"+c.id+".char",content:serializeChar(c)})),{name:"skits/.gitkeep",content:""}];
+    downloadTar(files,"fyeox-skit-maker-v"+STUDIO_VERSION+".tar");showToast("📦 Bundle downloaded!","#2ECC71");
+  }
+  const tag={fontSize:9,borderRadius:4,padding:"1px 6px",border:"1px solid"};
+  return(
+    <div style={{padding:10,maxHeight:"calc(100dvh - 220px)",overflowY:"auto",display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{background:"#0A0E1A",border:"2px solid #2A2D44",borderRadius:10,padding:"10px 14px"}}>
+        {false&&<div style={{color:"#FFE900",fontWeight:"bold",fontSize:14,marginBottom:10}}>🎬 Cast Library</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {CAST.length>0&&CAST.map(c=>(
+            <div key={c.id} style={{background:"#111827",border:"2px solid "+c.color+"33",borderRadius:8,padding:"10px 12px",display:"flex",gap:10,alignItems:"flex-start"}}>
+              <div style={{flexShrink:0}}>{getAvatar(c.id)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+                  <span style={{color:c.color,fontWeight:"bold",fontSize:13}}>{c.emoji} {c.name}</span>
+                  <span style={{...tag,background:c.color+"22",color:c.color,borderColor:c.color+"44"}}>{c.role}</span>
+                  <span style={{fontSize:9,color:"#556"}}>{c.species}</span>
+                </div>
+                <div style={{fontSize:10,color:"#8ABACC",marginBottom:4,fontStyle:"italic"}}>{c.appearance}</div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>{c.traits.map(t=><span key={t} style={{...tag,background:"#1A2838",color:"#6A8AB0",borderColor:"#2A3A50"}}>{t}</span>)}</div>
+                <div style={{fontSize:10,color:"#556",marginBottom:6}}>{c.modes.join(" · ")} — {c.animations.join(", ")||"no anims"}</div>
+                <button className="btn" onClick={()=>{downloadFile(serializeChar(c),c.id+".char","application/json");showToast("💾 "+c.name+".char saved",c.color);}} style={{padding:"3px 10px",fontSize:10,background:"#0A1A0A",color:c.color,border:"1px solid "+c.color,borderRadius:6}}>⬇ .char</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {importedChars.length>0&&(
+      <div style={{background:"#0A0E1A",border:"2px solid #2A2D44",borderRadius:10,padding:"10px 14px"}}>
+        <div style={{color:"#FFE900",fontWeight:"bold",fontSize:14,marginBottom:10}}>🎭 Character Library ({importedChars.length})</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {importedChars.map(c=>(
+            <div key={c.id} style={{background:"#111827",border:"2px solid #44336633",borderRadius:8,padding:"10px 12px",display:"flex",gap:10,alignItems:"flex-start"}}>
+              <div style={{flexShrink:0}}>{getImportedAvatar(c)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+                  <span style={{color:"#C8A0FF",fontWeight:"bold",fontSize:13}}>{c.emoji||"🎭"} {c.name}</span>
+                  <span style={{fontSize:9,color:"#888",background:"#1A1A2A",border:"1px solid #444",borderRadius:4,padding:"1px 6px"}}>{c.role||"Custom"}</span>
+                  <span style={{fontSize:9,color:"#556"}}>{c.species||""}</span>
+                </div>
+                <div style={{fontSize:10,color:"#8ABACC",marginBottom:4,fontStyle:"italic"}}>{c.appearance||""}</div>
+                <div style={{fontSize:10,color:"#556",marginBottom:6}}>{(c.modes||[]).join(" · ")||"idle"} — {(c.animations||[]).join(", ")||"no anims"}</div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn" onClick={()=>{downloadFile(serializeChar(c),c.id+".char","application/json");showToast("💾 "+c.name+".char saved","#C8A0FF");}} style={{padding:"3px 10px",fontSize:10,background:"#0A0A1A",color:"#C8A0FF",border:"1px solid #C8A0FF",borderRadius:6}}>⬇ .char</button>
+                  <button className="btn" onClick={()=>deleteImported(c.id)} style={{padding:"3px 10px",fontSize:10,background:"#1A0A0A",color:"#FF6666",border:"1px solid #FF6666",borderRadius:6}}>✕ Remove</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      )}
+      <div style={{background:"#0A0E1A",border:"2px solid #2A2D44",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+        <div>
+          <div style={{color:"#FFE900",fontWeight:"bold",fontSize:13}}>🎭 Import Character</div>
+          <div style={{fontSize:10,color:"#556",marginTop:2}}>Use Character Studio to create &amp; edit .char files</div>
+        </div>
+        <button className="btn" onClick={doImportChar} style={{padding:"8px 16px",fontSize:12,background:"#1A2A1A",color:"#2ECC71",border:"2px solid #2ECC71",boxShadow:"3px 3px 0 #000",flexShrink:0}}>📂 Import .char</button>
+      </div>
+      <div style={{background:"#0A0E1A",border:"2px solid #2A2D44",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+        <div>
+          <div style={{color:"#8ABACC",fontWeight:"bold",fontSize:12}}>📦 Project Bundle</div>
+          <div style={{fontSize:10,color:"#556",marginTop:2}}>LICENSE • README • all .char files</div>
+        </div>
+        <button className="btn" onClick={doBundle} style={{padding:"8px 14px",fontSize:11,background:"#1A2A1A",color:"#2ECC71",border:"2px solid #2ECC71",boxShadow:"3px 3px 0 #000",flexShrink:0}}>⬇ .tar</button>
+      </div>
+    </div>
+  );
+}
+
+function App(){
+  const [appView,setAppView]=useState("welcome");
+  const [skitTitle,setSkitTitle]=useState(DEFAULT_SKIT.title);
+  const [skitEpisode,setSkitEpisode]=useState(DEFAULT_SKIT.episode);
+  const [lines,setLines]=useState(DEFAULT_SKIT.lines.map(l=>({...l})));
+  const origLines=useRef(DEFAULT_SKIT.lines.map(l=>({...l})));
+  const linesRef=useRef(DEFAULT_SKIT.lines.map(l=>({...l})));
+  const [tab,setTab]=useState("studio");
+  const [saveStatus,setSaveStatus]=useState("idle");
+  const [toast,setToast]=useState(null);
+  const [recordings,setRecordings]=useState({});
+  const [recording,setRecording]=useState(null);
+  const [recTime,setRecTime]=useState(0);
+  const mediaRef=useRef(null);const chunksRef=useRef([]);const timerRef=useRef(null);
+  const previewRef=useRef(null);const audioB64=useRef({});
+  const [skitChars,setSkitChars]=useState(DEFAULT_SKIT.characters||{});
+  const skitCharsRef=useRef(DEFAULT_SKIT.characters||{});
+  const bposRef=useRef(null);
+  if(!bposRef.current){const b={...DEFAULT_BPOS};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{if(ch.bpos)b[id]=ch.bpos;});bposRef.current=b;}
+  const [compiledChars,setCompiledChars]=useState(()=>{const c={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{if(!ch.svg_component)return;try{const code=Babel.transform("("+ch.svg_component+")",{presets:["react"]}).code;c[id]=eval(code);}catch(e){}});return c;});
+  const [charModes,setCharModes]=useState(()=>{const m={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";});return m;});
+  const [charStates,setCharStates]=useState(()=>{const s={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{s[id]=ch.initial_state||null;});return s;});
+  const [charParams,setCharParams]=useState({});
+  const [bubble,setBubble]=useState(null);
+  const [gas,setGas]=useState(false);const [sfx,setSFX]=useState(null);
+  const [playing,setPlaying]=useState(false);const [phase,setPhase]=useState("idle");
+  const [showNewModal,setShowNewModal]=useState(false);
+  const [hasSession,setHasSession]=useState(false);
+  const [libVersion,setLibVersion]=useState(0);
+  function bumpLib(){setLibVersion(v=>v+1);}
+  useEffect(()=>{try{setHasSession(!!localStorage.getItem(LS_LAST_SKIT));}catch(e){};},[]);
+  // Auto-zoom: scale the whole UI to fit whatever viewport the user has
+  useEffect(()=>{
+    const DESIGN_WIDTH=1280;
+    const MIN_ZOOM=0.55;
+    const MAX_ZOOM=1.4;
+    function applyZoom(){
+      const ratio=Math.min(MAX_ZOOM,Math.max(MIN_ZOOM,window.innerWidth/DESIGN_WIDTH));
+      document.documentElement.style.zoom=String(ratio);
+    }
+    applyZoom();
+    window.addEventListener("resize",applyZoom);
+    return()=>{
+      window.removeEventListener("resize",applyZoom);
+      document.documentElement.style.zoom="";
+    };
+  },[]);
+  const cancelRef=useRef(false);const appViewRef=useRef("welcome");
+  const [bgComp,setBgComp]=useState(null);
+  const bgSrcRef=useRef("");
+  useEffect(()=>{appViewRef.current=appView;},[appView]);
+  function compileAndInitChars(chars){
+    skitCharsRef.current=chars||{};
+    const comp={};
+    Object.entries(chars||{}).forEach(([id,ch])=>{if(!ch.svg_component)return;try{const code=Babel.transform("("+ch.svg_component+")",{presets:["react"]}).code;comp[id]=eval(code);}catch(e){console.warn("SVG compile:",id,e);}});
+    setCompiledChars(comp);
+    const m={},s={};
+    Object.entries(chars||{}).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});
+    setCharModes(m);setCharStates(s);
+    const b={...DEFAULT_BPOS};Object.entries(chars||{}).forEach(([id,ch])=>{if(ch.bpos)b[id]=ch.bpos;});bposRef.current=b;
+  }
+
+  const autoSaveTimer=useRef(null);
+  function scheduleAutoSave(){
+    if(appViewRef.current!=="studio")return;
+    clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current=setTimeout(()=>{
+      try{localStorage.setItem(LS_LAST_SKIT,serializeSkit(skitTitle,skitEpisode,skitCharsRef.current,linesRef.current,audioB64.current));setSaveStatus("saved");setTimeout(()=>setSaveStatus("idle"),2000);}
+      catch(e){setSaveStatus("error");}
+    },800);
+  }
+  useEffect(()=>{linesRef.current=lines;scheduleAutoSave();},[lines,skitTitle,skitEpisode]);
+  // Keep bposRef in sync whenever skitChars changes (covers Beat Builder char additions)
+  useEffect(()=>{
+    const b={...DEFAULT_BPOS};
+    Object.entries(skitChars).forEach(([id,ch])=>{if(ch.bpos)b[id]=ch.bpos;});
+    bposRef.current=b;
+  },[skitChars]);
+  function showToast(msg,color="#FFE900"){setToast({msg,color});setTimeout(()=>setToast(null),3000);}
+  function applyLoadedSkit(d){
+    Object.values(recordings).forEach(u=>URL.revokeObjectURL(u));
+    setSkitTitle(d.title);setSkitEpisode(d.episode);
+    setLines(d.lines);origLines.current=d.lines.map(l=>({...l}));linesRef.current=d.lines;
+    const urls={},b64s={};
+    Object.entries(d.audio).forEach(([id,b64])=>{const u=b64ToUrl(b64);if(u){urls[id]=u;b64s[id]=b64;}});
+    audioB64.current=b64s;setRecordings(urls);
+    let _lib={};try{_lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");}catch(e){}
+    const _merged={...d.characters||{}};
+    Object.keys(_merged).forEach(id=>{if(_lib[id])_merged[id]=_lib[id];});
+    setSkitChars(_merged);compileAndInitChars(_merged);
+  }
+  function openFilePicker(cb){
+    const inp=document.createElement("input");inp.type="file";inp.accept=".skit,.json";
+    inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{applyLoadedSkit(parseSkit(ev.target.result));resetScene();showToast("📂 Loaded!","#2ECC71");if(cb)cb();}catch(err){alert("Could not load skit.\n"+err.message);}};reader.readAsText(file);};inp.click();
+  }
+  function handleLoadFromWelcome(){openFilePicker(()=>{setTab("studio");setAppView("studio");});}
+  function handleResume(){
+    try{
+      const s=localStorage.getItem(LS_LAST_SKIT);if(!s)return;
+      applyLoadedSkit(parseSkit(s));setTab("studio");setAppView("studio");showToast("↩ Session restored","#2ECC71");
+    }catch(e){alert("Could not restore session.\n"+e.message);}
+  }
+  function loadSkit(){openFilePicker(()=>setPhase("idle"));}
+  function loadBG(){
+    const inp=document.createElement("input");inp.type="file";inp.accept=".bg,.json";
+    inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d._type!=="fyeox_background")throw new Error("Not a .bg file");const code=Babel.transform("("+d.svg_component+")",{presets:["react"]}).code;const Comp=eval(code);setBgComp(()=>Comp);bgSrcRef.current=d.svg_component;showToast("\uD83D\uDDBC\uFE0F "+(d.name||d.id)+" loaded!","#8ABACC");}catch(err){alert("Could not load background.\n"+err.message);}};reader.readAsText(file);};
+    inp.click();
+  }
+  function confirmNewSkit(){
+    setShowNewModal(false);
+    Object.values(recordings).forEach(u=>URL.revokeObjectURL(u));
+    setSkitChars({});compileAndInitChars({});
+    setSkitTitle("New Skit");setSkitEpisode(1);
+    setLines([]);linesRef.current=[];origLines.current=[];audioB64.current={};setRecordings({});
+    resetScene();showToast("✨ New skit started","#8ABACC");
+  }
+  function saveSkit(){
+    downloadFile(serializeSkit(skitTitle,skitEpisode,skitCharsRef.current,lines,audioB64.current),
+      skitTitle.replace(/[^a-z0-9]/gi,"_").toLowerCase()+"_ep"+skitEpisode+".skit","application/json");
+    showToast("💾 Skit saved!","#2ECC71");
+  }
+  function exportViewer(){
+    const rc=lines.filter(l=>l.recordable&&recordings[l.id]).length;
+    const total=lines.filter(l=>l.recordable).length;
+    if(rc===0&&total>0&&!window.confirm("No lines recorded yet — viewer will use robot voice (TTS). Export anyway?")){return;}
+    downloadFile(buildViewerHTML(skitTitle,skitCharsRef.current,lines,audioB64.current,bgSrcRef.current),
+      skitTitle.replace(/[^a-z0-9]/gi,"_").toLowerCase()+"_ep"+skitEpisode+"_viewer.html","text/html");
+    showToast("🎬 Viewer exported!","#2ECC71");
+  }
+  function resetScene(){
+    cancelRef.current=true;if(previewRef.current)previewRef.current.pause();if(window.speechSynthesis)window.speechSynthesis.cancel();
+    const m={},s={};Object.entries(skitCharsRef.current||{}).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});setCharModes(m);setCharStates(s);
+    setBubble(null);setGas(false);setSFX(null);setPlaying(false);setPhase("idle");setCharParams({});
+  }
+  async function playSkit(){
+    if(playing)return;cancelRef.current=false;setPlaying(true);setPhase("playing");
+    const im={},is={};Object.entries(skitCharsRef.current||{}).forEach(([id,ch])=>{im[id]=ch.initial_mode||"idle";is[id]=ch.initial_state||null;});setCharModes(im);setCharStates(is);setBubble(null);setGas(false);setSFX(null);
+    const ok=()=>!cancelRef.current;
+    for (const beat of linesRef.current) {
+      if(!ok())break;
+      if(beat.pre_delay){await wait(beat.pre_delay);if(!ok())break;}
+      for(const eff of (beat.effects_before||[])){if(!ok())break;if(eff==="gas_on")setGas(true);else if(eff.startsWith("sfx:"))setSFX(eff.slice(4));else if(eff==="sound:fart")fart();else if(eff==="sound:bark")bark();else if(eff==="sound:thump")thump();}
+      if(beat.char&&beat.mode)setCharModes(m=>({...m,[beat.char]:beat.mode}));
+      if(beat.char&&beat.params!==undefined)setCharParams(p=>({...p,[beat.char]:{...(p[beat.char]||{}),...(beat.params||{})}}));
+      if(beat.char&&beat.char_state!==undefined)setCharStates(s=>({...s,[beat.char]:beat.char_state}));
+      if(beat.sfx_text)setSFX(beat.sfx_text);
+      for(const[i,s]of(beat.sounds||[]).entries()){const t=i*0.3;if(s==="bark")bark(t);else if(s==="thump")thump(t);else if(s==="fart")fart(t);}
+      if(beat.bubble&&beat.text){
+        const bp=bposRef.current[beat.char]||skitCharsRef.current[beat.char]?.bpos||{cx:270,cy:160,tailDir:"down-left"};
+        if(ok())setBubble({who:beat.char,text:beat.text,type:beat.bubble,cx:bp.cx,cy:bp.cy,tailDir:bp.tailDir});
+        if(recordings[beat.id])await playAudio(recordings[beat.id]);
+        else if(beat.tts)await speakFallback(beat.text,beat.tts);
+        else if(beat.duration)await wait(beat.duration);
+      }else if(beat.duration){await wait(beat.duration);}
+      if(!ok())break;
+      setBubble(null);setSFX(null);
+      if(beat.char&&beat.mode&&beat.recordable)setCharModes(m=>({...m,[beat.char]:skitCharsRef.current[beat.char]?.initial_mode||"idle"}));
+      for(const eff of (beat.effects_after||[])){if(!ok())break;if(eff==="gas_off")setGas(false);}
+      if(beat.post_delay){await wait(beat.post_delay);if(!ok())break;}
+    }
+    if(ok()){setPlaying(false);setPhase("done");}
+  }
+  async function startRec(lineId){
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      chunksRef.current=[];const mr=new MediaRecorder(stream);
+      mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
+      mr.onstop=async()=>{
+        const blob=new Blob(chunksRef.current,{type:"audio/webm"});const url=URL.createObjectURL(blob);
+        setRecordings(r=>({...r,[lineId]:url}));stream.getTracks().forEach(t=>t.stop());
+        try{setSaveStatus("saving");const b64=await blobToB64(blob);audioB64.current[lineId]=b64;scheduleAutoSave();}catch(e){setSaveStatus("error");}
+      };
+      mr.start();mediaRef.current=mr;setRecording(lineId);setRecTime(0);
+      timerRef.current=setInterval(()=>setRecTime(t=>t+1),1000);
+    }catch(e){alert("Microphone access required.");}
+  }
+  function stopRec(){if(mediaRef.current&&mediaRef.current.state!=="inactive")mediaRef.current.stop();clearInterval(timerRef.current);setRecording(null);setRecTime(0);}
+  function clearRec(id){if(recordings[id])URL.revokeObjectURL(recordings[id]);setRecordings(r=>{const n={...r};delete n[id];return n;});delete audioB64.current[id];scheduleAutoSave();}
+  function previewLine(url){if(previewRef.current)previewRef.current.pause();const a=new Audio(url);previewRef.current=a;a.play();}
+  function changeLineText(id,text){setLines(prev=>{const n=prev.map(l=>l.id===id?{...l,text}:l);linesRef.current=n;return n;});}
+  function resetLineText(id){const d=origLines.current.find(x=>x.id===id);if(d)changeLineText(id,d.text);}
+  function changeLineMode(id,mode){
+    setLines(prev=>{
+      const idx=prev.findIndex(l=>l.id===id);
+      if(idx<0)return prev;
+      const l=prev[idx];
+      let next;
+      if(l._new){
+        const newId=genBeatId(l.char,mode,idx);
+        next=[...prev];
+        next[idx]={...l,id:newId,mode};
+      }else{
+        next=prev.map(l2=>l2.id===id?{...l2,mode}:l2);
+      }
+      linesRef.current=next;
+      return next;
+    });
+  }
+  function changeLineParams(id,params){setLines(prev=>{const n=prev.map(l=>l.id===id?{...l,params}:l);linesRef.current=n;return n;});}
+  // ── v0.5.0 Beat Builder ──────────────────────────────────────────────────
+  function addBeat(){
+    setLines(prev=>{
+      const idx=prev.length;
+      const b=makeBeat(idx);
+      origLines.current=[...origLines.current,{...b}];
+      const n=[...prev,b];
+      linesRef.current=n;
+      return n;
+    });
+  }
+  function deleteBeat(id){
+    if(recordings[id])URL.revokeObjectURL(recordings[id]);
+    setRecordings(r=>{const n={...r};delete n[id];return n;});
+    delete audioB64.current[id];
+    origLines.current=origLines.current.filter(l=>l.id!==id);
+    setLines(prev=>{const n=prev.filter(l=>l.id!==id);linesRef.current=n;return n;});
+  }
+  function moveBeat(id,dir){
+    setLines(prev=>{
+      const i=prev.findIndex(l=>l.id===id);
+      if(i<0)return prev;
+      const ni=i+dir;
+      if(ni<0||ni>=prev.length)return prev;
+      const next=[...prev];
+      [next[i],next[ni]]=[next[ni],next[i]];
+      linesRef.current=next;
+      return next;
+    });
+  }
+  function changeBeatChar(id,char){
+    // If char is not in the active skit yet, pull it from the library and register it
+    if(char&&!skitCharsRef.current[char]){
+      try{
+        const _lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");
+        if(_lib[char]){
+          const ch=_lib[char];
+          const merged={...skitCharsRef.current,[char]:ch};
+          skitCharsRef.current=merged;
+          setSkitChars(merged);
+          // compile svg if present
+          if(ch.svg_component){
+            try{const code=Babel.transform("("+ch.svg_component+")",{presets:["react"]}).code;
+              setCompiledChars(c=>({...c,[char]:eval(code)}));}catch(e){}
+          }
+          // register bpos
+          if(ch.bpos)bposRef.current={...bposRef.current,[char]:ch.bpos};
+          // init mode/state
+          setCharModes(m=>({...m,[char]:ch.initial_mode||"idle"}));
+          setCharStates(s=>({...s,[char]:ch.initial_state||null}));
+        }
+      }catch(e){}
+    }
+    setLines(prev=>{
+      const idx=prev.findIndex(l=>l.id===id);
+      if(idx<0)return prev;
+      const l=prev[idx];
+      const modes=skitCharsRef.current[char]?.modes||[];
+      const mode=modes.length?modes[0]:"";
+      const newId=l._new?genBeatId(char,mode,idx):l.id;
+      const next=[...prev];
+      next[idx]={...l,id:newId,char,mode};
+      linesRef.current=next;
+      return next;
+    });
+  }
+  function changeBeatType(id,type){
+    setLines(prev=>{
+      const target=prev.find(l=>l.id===id);
+      if(type==="dialogue"&&!target?.char){
+        showToast("Pick a character first!","#FF8844");return prev;
+      }
+      const n=prev.map(l=>{
+        if(l.id!==id)return l;
+        if(type==="dialogue")
+          return{...l,recordable:true,duration:undefined,
+            text:l.text||"",bubble:l.bubble||"speech",tts:l.tts||{pitch:1,rate:1}};
+        if(type==="sfx")
+          return{...l,recordable:false,char:"",mode:"",
+            duration:l.duration||1000,sfx_text:l.sfx_text||""};
+        return{...l,recordable:false,duration:l.duration||1000};
+      });
+      linesRef.current=n;
+      return n;
+    });
+  }
+  function changeBeatDuration(id,ms){
+    setLines(prev=>{const n=prev.map(l=>l.id===id?{...l,duration:ms}:l);linesRef.current=n;return n;});
+  }
+  function changeBeatSfxText(id,text){
+    setLines(prev=>{const n=prev.map(l=>l.id===id?{...l,sfx_text:text}:l);linesRef.current=n;return n;});
+  }
+
+  const recordableLines=lines.filter(l=>l.recordable);
+  const recCount=recordableLines.filter(l=>recordings[l.id]).length;
+  // Merge LS_CHAR_LIB into skitChars so BeatCard dropdown shows all imported characters
+  const allCharsForBeats=React.useMemo(()=>{
+    let lib={};try{lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");}catch(e){}
+    return{...lib,...skitChars};
+  },[skitChars,libVersion]);
+  const badgeStyle={fontSize:11,fontFamily:"'Comic Sans MS',cursive",fontWeight:"bold",padding:"2px 10px",borderRadius:6,
+    background:saveStatus==="saved"?"#0A2A0A":saveStatus==="saving"?"#1A1A00":saveStatus==="error"?"#2A0A0A":"#1A1A2A",
+    color:saveStatus==="saved"?"#2ECC71":saveStatus==="saving"?"#FFE900":saveStatus==="error"?"#FF6666":"#334",
+    border:"1px solid "+(saveStatus==="saved"?"#2ECC71":saveStatus==="saving"?"#888800":saveStatus==="error"?"#AA3333":"#2A2D44")};
+  const SF={fontFamily:"'Comic Sans MS',cursive"};
+  const TABS=[{id:"characters",label:"🎭 Characters"},{id:"studio",label:"🎙️ Studio"},{id:"watch",label:"▶ Watch"}];
+
+  if(appView==="welcome") return <WelcomeScreen onLoad={handleLoadFromWelcome} hasSession={hasSession} onResume={handleResume} onStartBlank={()=>{confirmNewSkit();setAppView("studio");}}/>;
+  return(
+    <div style={{minHeight:"100dvh",background:"radial-gradient(ellipse at top,#1a2838,#0d1520)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",padding:"8px 8px 4px",...SF}}>
+      {showNewModal&&<NewSkitModal castArr={CAST} currentTitle={skitTitle} onConfirm={confirmNewSkit} onCancel={()=>setShowNewModal(false)}/>}
+      {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:"#111",border:"2px solid "+toast.color,borderRadius:10,padding:"8px 20px",fontSize:13,...SF,fontWeight:"bold",color:toast.color,zIndex:900,boxShadow:"4px 4px 0 #000",animation:"bubbleFade .2s ease-out"}}>{toast.msg}</div>}
+      <div style={{fontSize:17,fontWeight:"bold",color:"#FFE900",textShadow:"2px 2px 0 #8B0000",letterSpacing:2,marginBottom:1,textAlign:"center"}}>🎭 FYEOX Skit Studio</div>
+      <div style={{fontSize:10,color:"#8ABACC",fontStyle:"italic",marginBottom:4,textAlign:"center"}}>Helping bring your ideas to skit.</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap",justifyContent:"center"}}>
+        <button className="btn" onClick={()=>setShowNewModal(true)} style={{padding:"5px 12px",fontSize:11,background:"#1A1A2A",color:"#8ABACC",border:"1px solid #2A2D44"}}>✨ New Skit</button>
+        <button className="btn" onClick={loadSkit} style={{padding:"5px 12px",fontSize:11,background:"#0A1A3A",color:"#7ABAFF",border:"1px solid #2255AA",boxShadow:"2px 2px 0 #000"}}>📂 Load</button>
+        <button className="btn" onClick={saveSkit} style={{padding:"5px 12px",fontSize:11,background:"#0A2A0A",color:"#2ECC71",border:"1px solid #2ECC71",boxShadow:"2px 2px 0 #000"}}>💾 Save Skit</button>
+        <span style={badgeStyle}>{saveStatus==="saved"?"✓ Auto-saved":saveStatus==="saving"?"💾 Saving...":saveStatus==="error"?"✖ Save failed":"💾 Auto-save on"}</span>
+        <button className="btn" onClick={exportViewer} style={{padding:"5px 12px",fontSize:11,background:"#1A0A2A",color:"#CC88FF",border:"1px solid #882299",boxShadow:"2px 2px 0 #000"}}>🎬 Export Viewer</button>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap",justifyContent:"center"}}>
+        <input value={skitTitle} onChange={e=>setSkitTitle(e.target.value)} style={{background:"#1A2838",color:"#FFE900",border:"2px solid #334",borderRadius:8,padding:"5px 12px",fontSize:14,...SF,fontWeight:"bold",width:260,outline:"none"}} placeholder="Skit title..."/>
+        <div style={{display:"flex",alignItems:"center",gap:6,color:"#8ABACC",fontSize:12}}>Ep.<input type="number" min="1" value={skitEpisode} onChange={e=>setSkitEpisode(Number(e.target.value))} style={{background:"#1A2838",color:"#FFE900",border:"2px solid #334",borderRadius:6,padding:"4px 8px",fontSize:13,...SF,fontWeight:"bold",width:54,outline:"none",textAlign:"center"}}/></div>
+        <span style={{fontSize:11,color:"#556"}}>🎙️ {recCount}/{recordableLines.length} recorded</span>
+      </div>
+      <div style={{display:"flex",gap:0,alignSelf:"stretch",maxWidth:580,margin:"0 auto"}}>
+        {TABS.map(t=>(
+          <button key={t.id} className="btn" onClick={()=>{if(t.id==="watch")resetScene();setTab(t.id);}}
+            style={{flex:1,padding:"7px 0",fontSize:11,borderRadius:"8px 8px 0 0",background:tab===t.id?"#1A2838":"#0D1218",color:tab===t.id?"#FFE900":"#556",border:"2px solid "+(tab===t.id?"#FFE900":"#2A2D44"),borderBottom:tab===t.id?"2px solid #1A2838":"2px solid #2A2D44"}}
+            dangerouslySetInnerHTML={{__html:t.label}}/>
+        ))}
+      </div>
+      <div style={{background:"#1A2838",border:"3px solid #FFE900",borderRadius:"0 0 12px 12px",boxShadow:"0 0 28px rgba(255,233,0,0.18),6px 6px 0 #000",width:"100%",maxWidth:580,overflow:"hidden"}}>
+        {tab==="studio"&&(
+          <div style={{padding:10,maxHeight:"calc(100dvh - 220px)",overflowY:"auto",display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{background:"#0A1A0A",border:"2px solid #2ECC71",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div><div style={{color:"#2ECC71",fontWeight:"bold",fontSize:14}}>🎙️ RECORDING STUDIO</div><div style={{color:"#7ABF7A",fontSize:11,marginTop:2}}>{recCount}/{recordableLines.length} lines recorded{recCount===recordableLines.length?" — Ready! 🎬":""}</div></div>
+              <div style={{width:80,height:8,background:"#0A140A",borderRadius:4,overflow:"hidden"}}><div style={{width:((recCount/Math.max(recordableLines.length,1))*100)+"%",height:"100%",background:"#2ECC71",transition:"width .3s"}}/></div>
+            </div>
+            {lines.map((line,i)=>(
+              line.recordable
+                ?<LineCard key={line.id} line={line} index={i} origText={origLines.current.find(x=>x.id===line.id)?.text??line.text}
+                  recordings={recordings} recording={recording} recTime={recTime}
+                  startRec={startRec} stopRec={stopRec} clearRec={clearRec}
+                  onPreview={previewLine} onTextChange={changeLineText} onReset={resetLineText}
+                  isFirst={i===0} isLast={i===lines.length-1}
+                  onDelete={deleteBeat} onMoveUp={id=>moveBeat(id,-1)} onMoveDown={id=>moveBeat(id,1)}
+                  onTypeChange={changeBeatType}/>
+                :<BeatCard key={line.id} line={line} idx={i} skitChars={allCharsForBeats}
+                  isFirst={i===0} isLast={i===lines.length-1}
+                  onModeChange={changeLineMode} onParamsChange={changeLineParams}
+                  onDelete={deleteBeat} onMoveUp={id=>moveBeat(id,-1)} onMoveDown={id=>moveBeat(id,1)}
+                  onCharChange={changeBeatChar} onTypeChange={changeBeatType}
+                  onDurationChange={changeBeatDuration} onSfxTextChange={changeBeatSfxText}/>
+            ))}
+            <button className="btn" onClick={addBeat}
+              style={{padding:"10px 0",fontSize:13,background:"#0A1A2A",color:"#7ABAFF",
+                border:"2px dashed #2255AA",borderRadius:10,width:"100%",
+                boxShadow:"3px 3px 0 #000",marginTop:4}}>+ Add Beat</button>
+          </div>
+        )}
+        {tab==="watch"&&(
+          <div>
+            <svg width="540" height="320" viewBox="0 0 540 320" style={{display:"block",width:"100%"}}>
+              {bgComp&&React.createElement(bgComp)}
+              {Object.entries(compiledChars).map(([id,Comp])=>Comp?<Comp key={id} mode={charModes[id]||"idle"} state={charStates[id]||null} params={charParams[id]||{}}/>:null)}
+              {gas&&<GasCloud/>}
+              {bubble&&(()=>{const p=bposRef.current[bubble.who]||skitCharsRef.current[bubble.who]?.bpos||{cx:270,cy:160,tailDir:"down-left"};return <Bubble cx={p.cx} cy={p.cy} text={bubble.text} type={bubble.type} tailDir={p.tailDir}/>;})()}
+              {sfx&&<SFXText text={sfx}/>}
+              {phase==="idle"&&(<g style={{animation:"bubbleFade .4s ease-out"}}><rect x="95" y="130" width="350" height="60" rx="12" fill="rgba(0,0,0,.82)" stroke="#FFE900" strokeWidth="2.5"/><text x="270" y="153" textAnchor="middle" fontSize="11" fill="#8ABACC" fontFamily="'Comic Sans MS',cursive">{recCount<recordableLines.length?"⚠️ "+(recordableLines.length-recCount)+" line(s) will use robot voice":"✓ All lines recorded — your voice!"}</text><text x="270" y="175" textAnchor="middle" fontSize="13" fill="#FFE900" fontFamily="'Comic Sans MS',cursive" fontWeight="bold">Hit &#9654; Play to perform the skit</text></g>)}
+              {phase==="done"&&(<g style={{animation:"bubbleFade .4s ease-out"}}><rect x="155" y="134" width="230" height="52" rx="12" fill="rgba(0,0,0,.85)" stroke="#FFE900" strokeWidth="2.5"/><text x="270" y="158" textAnchor="middle" fontSize="17" fill="#FFE900" fontFamily="'Comic Sans MS',cursive" fontWeight="bold">🎬 THE END 🎬</text><text x="270" y="178" textAnchor="middle" fontSize="11" fill="#8ABACC" fontFamily="'Comic Sans MS',cursive">Bobby will return...</text></g>)}
+            </svg>
+            <div style={{display:"flex",gap:10,padding:"12px 16px",background:"#0D1218",justifyContent:"center"}}>
+              <button className="btn" onClick={playSkit} disabled={playing} style={{padding:"11px 28px",fontSize:16,background:playing?"#222":"#C0392B",color:playing?"#555":"white",border:"3px solid #FFE900",borderRadius:10,boxShadow:"4px 4px 0 #000"}}>{playing?"▶ Playing...":"▶ Play Skit"}</button>
+              <button className="btn" onClick={resetScene} style={{padding:"11px 20px",fontSize:16,background:"#1A2838",color:"white",border:"3px solid #FFE900",borderRadius:10,boxShadow:"4px 4px 0 #000"}}>↻ Reset</button>
+              <button className="btn" onClick={()=>setTab("studio")} style={{padding:"11px 18px",fontSize:13,background:"#0A1A0A",color:"#2ECC71",border:"2px solid #2ECC71",borderRadius:10,boxShadow:"3px 3px 0 #000"}}>🎙️ {recCount}/{recordableLines.length}</button>
+              <button className="btn" onClick={loadBG} style={{padding:"11px 16px",fontSize:13,background:"#0A1828",color:"#8ABACC",border:"2px solid #2A4A6A",borderRadius:10,boxShadow:"3px 3px 0 #000"}}>🖼 BG</button>
+            </div>
+          </div>
+        )}
+        {tab==="characters"&&<CharactersTab showToast={showToast} onLibChange={bumpLib}/>}
+      </div>
+      <div style={{marginTop:8,fontSize:11,textAlign:"center"}}><span style={{color:"#FFE900",fontWeight:"bold"}}>v{STUDIO_VERSION}</span><a href={"https://github.com/unixabg/FYEOXSkits/"} target="_blank" rel="noreferrer" style={{color:"#FFE900",textDecoration:"none",marginLeft:3}} title="Project page on GitHub">↗</a><span style={{color:"#8ABACC"}}> &nbsp;&bull;&nbsp; FYEOX Skit Studio &nbsp;&bull;&nbsp; fyeox.com &nbsp;&bull;&nbsp; AGPL-3.0</span></div>
+    </div>
+  );
+}
+
+function buildViewerHTML(title,characters,lines,audioMap,bgSrc){
+  const baked=JSON.stringify({
+    _type:"fyeox_skit",_version:STUDIO_VERSION,title,characters,lines,audio:audioMap,bg_src:bgSrc||""
+  }).replace(/</g,"\\u003c").replace(/>/g,"\\u003e").replace(/\//g,"\\u002f");
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FYEOX \u2014 ${title}<\/title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<style>*{box-sizing:border-box;margin:0;padding:0;}body{background:#0d1520;font-family:'Comic Sans MS',cursive;display:flex;align-items:center;justify-content:center;min-height:100vh;}
+@keyframes rockSway{0%,100%{transform:rotate(0deg)}50%{transform:rotate(1.8deg)}}
+@keyframes backUp{0%{transform:translateX(0)}100%{transform:translateX(var(--bk-x,80px))}}
+@keyframes backUp{0%{transform:translateX(0)}100%{transform:translateX(var(--bk-x,80px))}}
+@keyframes caneShake{0%{transform:rotate(0deg)}25%{transform:rotate(-14deg)}75%{transform:rotate(14deg)}100%{transform:rotate(0deg)}}
+@keyframes barkShake{0%{transform:translate(0,0)}25%{transform:translate(-5px,-4px) rotate(-5deg)}75%{transform:translate(5px,3px) rotate(5deg)}100%{transform:translate(0,0)}}
+@keyframes growlShake{0%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}100%{transform:translateX(0)}}
+@keyframes gasPulse{from{opacity:.7;transform:scale(.95)}to{opacity:1;transform:scale(1.05)}}
+@keyframes popIn{0%{transform:scale(0) rotate(-12deg);opacity:0}70%{transform:scale(1.2);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes bubbleFade{from{opacity:0;transform:scale(.75)}to{opacity:1;transform:scale(1)}}<\/style>
+<\/head><body><div id="r"><\/div>
+<script id="bd" type="application/json">${baked}<\/script>
+<script type="text/babel">
+const {useState,useRef,useEffect}=React;
+const D=JSON.parse(document.getElementById('bd').textContent);
+const LN=D.lines||[],AU=D.audio||{},CHARS=D.characters||{};
+const charComps={};
+Object.entries(CHARS).forEach(([id,ch])=>{
+  if(!ch.svg_component)return;
+  try{const code=Babel.transform('('+ch.svg_component+')',{presets:['react']}).code;charComps[id]=eval(code);}
+  catch(e){console.warn('charComp fail:',id,e);}
+});
+const BPOS={};Object.entries(CHARS).forEach(([id,ch])=>{if(ch.bpos)BPOS[id]=ch.bpos;});
+let _x=null;const ac=()=>{if(!_x)_x=new(window.AudioContext||window.webkitAudioContext)();return _x;};
+const wt=ms=>new Promise(r=>setTimeout(r,ms));
+function fa(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain(),l=c.createOscillator(),lg=c.createGain();l.frequency.value=13;lg.gain.value=30;l.connect(lg);lg.connect(o.frequency);o.type="sawtooth";o.frequency.setValueAtTime(88,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(38,c.currentTime+t+0.6);g.gain.setValueAtTime(0.45,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.7);o.connect(g);g.connect(c.destination);l.start(c.currentTime+t);o.start(c.currentTime+t);l.stop(c.currentTime+t+0.7);o.stop(c.currentTime+t+0.7);}
+function bk(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="square";o.frequency.setValueAtTime(470,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(195,c.currentTime+t+0.2);g.gain.setValueAtTime(0,c.currentTime+t);g.gain.linearRampToValueAtTime(0.28,c.currentTime+t+0.01);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.24);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.28);}
+function th(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="sine";o.frequency.setValueAtTime(145,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(26,c.currentTime+t+0.15);g.gain.setValueAtTime(0.6,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.18);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.22);}
+function pa(url){return new Promise(r=>{if(!url){r();return;}const a=new Audio(url);a.onended=r;a.onerror=r;a.play().catch(r);});}
+function sf(text,o={}){return new Promise(r=>{if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=o.pitch??1;u.rate=o.rate??1;u.onend=r;u.onerror=()=>setTimeout(r,500);setTimeout(()=>window.speechSynthesis.speak(u),60);});}
+function b2u(b64){try{const a=b64.split(","),m=a[0].match(/:(.*?);/)[1],b=atob(a[1]),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return URL.createObjectURL(new Blob([u],{type:m}));}catch(e){return null;}}
+let _bgComp=null;
+if(D.bg_src){try{const _bc=Babel.transform("("+D.bg_src+")",{presets:["react"]}).code;_bgComp=eval(_bc);}catch(e){console.warn("bg fail",e);}}
+function GasCloud(){return(<g style={{animation:"gasPulse 0.4s ease-in-out infinite alternate"}}><ellipse cx="385" cy="210" rx="42" ry="26" fill="rgba(100,200,60,0.52)"/><ellipse cx="358" cy="220" rx="27" ry="18" fill="rgba(100,200,60,0.46)"/><\/g>);}
+function Bubble({cx,cy,text,type,tailDir}){
+  const ls=text.split("\\n"),bw=Math.max(...ls.map(l=>l.length))*7.5+32,bh=ls.length*20+18,bx=cx-bw/2,by=cy-bh/2;
+  if(type==="bark"){const pts=[];for(let i=0;i<8;i++){const a1=(i/8)*Math.PI*2,a2=((i+0.5)/8)*Math.PI*2;pts.push((cx+Math.cos(a1)*(bw/2+13))+","+(cy+Math.sin(a1)*(bh/2+11)));pts.push((cx+Math.cos(a2)*(bw/2))+","+(cy+Math.sin(a2)*(bh/2)));}return(<g style={{animation:"popIn .15s ease-out"}}><polygon points={pts.join(" ")} fill="#FFE900" stroke="#000" strokeWidth="3"/><ellipse cx={cx} cy={cy} rx={bw/2} ry={bh/2} fill="#FFE900" stroke="#000" strokeWidth="2.5"/>{ls.map((l,i)=><text key={i} x={cx} y={cy+(i-(ls.length-1)/2)*20+5} textAnchor="middle" fontSize="15" fill="#CC0000" fontFamily="Comic Sans MS" fontWeight="bold">{l}<\/text>)}<\/g>);}
+  if(type==="thought"){return(<g style={{animation:"bubbleFade .25s ease-out"}}><ellipse cx={cx} cy={cy} rx={bw/2} ry={bh/2} fill="white" stroke="#AAA" strokeWidth="2" strokeDasharray="5,3"/>{ls.map((l,i)=><text key={i} x={cx} y={cy+(i-(ls.length-1)/2)*20+5} textAnchor="middle" fontSize="12" fill="#555" fontFamily="Comic Sans MS" fontStyle="italic">{l}<\/text>)}<circle cx={cx-bw/2+10} cy={cy+bh/2+8} r="5" fill="white" stroke="#AAA" strokeWidth="1.5"/><\/g>);}
+    return(<g style={{animation:"bubbleFade .22s ease-out"}}><rect x={bx} y={by} width={bw} height={bh} rx="12" fill="white" stroke="#000" strokeWidth="3"/>{ls.map((l,i)=><text key={i} x={cx} y={by+14+i*20+(bh-ls.length*20)/2} textAnchor="middle" fontSize="13" fill="#000" fontFamily="Comic Sans MS" fontWeight="bold">{l}<\/text>)}<\/g>);
+}
+function SFXText({text}){return <text x="270" y="72" textAnchor="middle" fontSize="26" fill="#CC0000" fontFamily="Comic Sans MS" fontWeight="bold" stroke="white" strokeWidth="5" paintOrder="stroke" style={{animation:"popIn .18s ease-out"}}>{text}<\/text>;}
+function Viewer(){
+  const [charModes,setCharModes]=useState(()=>{const m={};Object.entries(CHARS).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";});return m;});
+  const [charStates,setCharStates]=useState(()=>{const s={};Object.entries(CHARS).forEach(([id,ch])=>{s[id]=ch.initial_state||null;});return s;});
+  const [charParams,setCharParams]=useState({});
+  const [bub,setBub]=useState(null);const [gas,setGas]=useState(false);
+  const [sfx,setSFX]=useState(null);const [play,setPlay]=useState(false);const [ph,setPh]=useState("idle");
+  const cr=useRef(false),au=useRef({});
+  useEffect(()=>{const u={};Object.entries(AU).forEach(([id,b64])=>{const x=b2u(b64);if(x)u[id]=x;});au.current=u;return()=>Object.values(u).forEach(x=>URL.revokeObjectURL(x));},[]);
+  function reset(){
+    cr.current=true;if(window.speechSynthesis)window.speechSynthesis.cancel();
+    const m={},s={};Object.entries(CHARS).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});
+    setCharModes(m);setCharStates(s);setBub(null);setGas(false);setSFX(null);setPlay(false);setPh("idle");
+  }
+  async function playSkit(){
+    if(play)return;cr.current=false;setPlay(true);setPh("playing");
+    const ok=()=>!cr.current;
+    for (const beat of LN){
+      if(!ok())break;
+      if(beat.pre_delay){await wt(beat.pre_delay);if(!ok())break;}
+      for(const eff of (beat.effects_before||[])){if(!ok())break;if(eff==="gas_on")setGas(true);else if(eff.startsWith("sfx:"))setSFX(eff.slice(4));else if(eff==="sound:fart")fa();else if(eff==="sound:bark")bk();else if(eff==="sound:thump")th();}
+      if(beat.char&&beat.mode)setCharModes(m=>({...m,[beat.char]:beat.mode}));
+      if(beat.char&&beat.params!==undefined)setCharParams(p=>({...p,[beat.char]:{...(p[beat.char]||{}),...(beat.params||{})}}));
+      if(beat.char&&beat.char_state!==undefined)setCharStates(s=>({...s,[beat.char]:beat.char_state}));
+      if(beat.sfx_text)setSFX(beat.sfx_text);
+      for(const[i,s]of(beat.sounds||[]).entries()){const t=i*0.3;if(s==="bark")bk(t);else if(s==="thump")th(t);else if(s==="fart")fa(t);}
+      if(beat.bubble&&beat.text){
+        const bp=BPOS[beat.char]||{cx:270,cy:160,tailDir:"down-left"};
+        if(ok())setBub({who:beat.char,text:beat.text,type:beat.bubble,cx:bp.cx,cy:bp.cy,tailDir:bp.tailDir});
+        if(au.current[beat.id])await pa(au.current[beat.id]);
+        else if(beat.tts)await sf(beat.text,beat.tts);
+        else if(beat.duration)await wt(beat.duration);
+      }else if(beat.duration){await wt(beat.duration);}
+      if(!ok())break;
+      setBub(null);setSFX(null);
+      if(beat.char&&beat.mode&&beat.recordable)setCharModes(m=>({...m,[beat.char]:CHARS[beat.char]?.initial_mode||"idle"}));
+      for(const eff of (beat.effects_after||[])){if(!ok())break;if(eff==="gas_off")setGas(false);}
+      if(beat.post_delay){await wt(beat.post_delay);if(!ok())break;}
+    }
+    if(ok()){setPlay(false);setPh("done");}
+  }
+  const S={fontFamily:"'Comic Sans MS',cursive"};
+  return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"radial-gradient(ellipse at top,#1a2838,#0d1520)",padding:16,...S}}>
+    <div style={{fontSize:18,fontWeight:"bold",color:"#FFE900",textShadow:"3px 3px 0 #8B0000",marginBottom:2}}>🎭 FYEOX Skit Studio<\/div>
+    <div style={{fontSize:11,color:"#8ABACC",fontStyle:"italic",marginBottom:10}}>{D.title}<\/div>
+    <div style={{border:"3px solid #FFE900",borderRadius:12,boxShadow:"6px 6px 0 #000",overflow:"hidden"}}>
+      <svg width="540" height="320" viewBox="0 0 540 320" style={{display:"block",maxWidth:"100%"}}>
+        {_bgComp&&React.createElement(_bgComp)}
+        {Object.entries(CHARS).map(([id,ch])=>{const Comp=charComps[id];if(!Comp)return null;return <Comp key={id} mode={charModes[id]} state={charStates[id]} params={charParams[id]||{}}\/>;} )}
+        {gas&&<GasCloud\/>}
+        {bub&&(()=>{const p=BPOS[bub.who]||CHARS[bub.who]?.bpos||{cx:270,cy:160,tailDir:"down-left"};return <Bubble cx={p.cx} cy={p.cy} text={bub.text} type={bub.type} tailDir={p.tailDir}\/>;})()}
+        {sfx&&<SFXText text={sfx}\/>}
+        {ph==="idle"&&(<g style={{animation:"bubbleFade .4s ease-out"}}><rect x="120" y="138" width="300" height="44" rx="10" fill="rgba(0,0,0,.85)" stroke="#FFE900" strokeWidth="2"/><text x="270" y="165" textAnchor="middle" fontSize="14" fill="#FFE900" fontFamily="Comic Sans MS" fontWeight="bold">&#9654; Hit Play to watch!<\/text><\/g>)}
+        {ph==="done"&&(<g style={{animation:"bubbleFade .4s ease-out"}}><rect x="155" y="134" width="230" height="52" rx="12" fill="rgba(0,0,0,.85)" stroke="#FFE900" strokeWidth="2.5"/><text x="270" y="158" textAnchor="middle" fontSize="17" fill="#FFE900" fontFamily="Comic Sans MS" fontWeight="bold">&#127916; THE END &#127916;<\/text><text x="270" y="178" textAnchor="middle" fontSize="11" fill="#8ABACC" fontFamily="Comic Sans MS">Bobby will return...<\/text><\/g>)}
+      <\/svg>
+      <div style={{display:"flex",gap:10,padding:"12px 16px",background:"#0D1218",justifyContent:"center"}}>
+        <button onClick={playSkit} disabled={play} style={{padding:"11px 36px",fontSize:18,...S,fontWeight:"bold",background:play?"#222":"#C0392B",color:play?"#555":"white",border:"3px solid #FFE900",borderRadius:10,cursor:play?"not-allowed":"pointer",boxShadow:"4px 4px 0 #000"}}>{play?"▶ Playing...":"▶ Play Skit"}<\/button>
+        <button onClick={reset} style={{padding:"11px 20px",fontSize:16,...S,fontWeight:"bold",background:"#1A2838",color:"white",border:"3px solid #FFE900",borderRadius:10,cursor:"pointer",boxShadow:"4px 4px 0 #000"}}>&#8635; Reset<\/button>
+      <\/div>
+    <\/div>
+    <div style={{marginTop:8,fontSize:10,color:"#334"}}>Made with FYEOX SkitStudio v0.5.0 &bull; fyeox.com<\/div>
+  <\/div>);
+}
+const r=ReactDOM.createRoot(document.getElementById('r'));r.render(<Viewer\/>);
+<\/script><\/body><\/html>`;
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>

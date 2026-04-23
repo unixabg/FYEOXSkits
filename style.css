@@ -1,0 +1,198 @@
+/*
+  FYEOX Shared Stylesheet — style.css
+  Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg
+  GNU Affero General Public License v3 or later.
+
+  Used by: FyeoxSkitStudio.html, CharacterStudio.html
+  Place in the same folder as the HTML files.
+*/
+
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;}
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
+body{
+  background:#0d1520;
+  font-family:'Comic Sans MS',cursive;
+  color:#C8CAD8;
+}
+
+/* ── FYEOX colour tokens ────────────────────────────────────────────────── */
+:root{
+  --fyeox-yellow:   #FFE900;
+  --fyeox-red:      #8B0000;
+  --fyeox-blue:     #8ABACC;
+  --fyeox-green:    #2ECC71;
+  --fyeox-purple:   #CC88FF;
+  --fyeox-bg:       #0d1520;
+  --fyeox-surface:  #1A2838;
+  --fyeox-border:   #2A2D44;
+  --fyeox-input-bg: #080C16;
+  --fyeox-muted:    #334;
+}
+
+/* ── Button base ────────────────────────────────────────────────────────── */
+.btn{
+  font-family:'Comic Sans MS',cursive;
+  font-weight:bold;
+  cursor:pointer;
+  border-radius:8px;
+  transition:all .1s;
+}
+.btn:active{transform:translate(1px,1px);}
+.btn:disabled{cursor:not-allowed;opacity:0.5;}
+
+/* ── Input base ─────────────────────────────────────────────────────────── */
+.inp{
+  background:var(--fyeox-input-bg);
+  color:#C8CAD8;
+  border:1.5px solid var(--fyeox-border);
+  border-radius:6px;
+  padding:5px 8px;
+  font-size:11px;
+  font-family:'Comic Sans MS',cursive;
+  outline:none;
+  width:100%;
+  display:block;
+}
+.inp:focus{border-color:var(--fyeox-yellow);}
+
+/* ── Card / panel ───────────────────────────────────────────────────────── */
+.card{
+  background:#0A0E1A;
+  border:2px solid var(--fyeox-border);
+  border-radius:10px;
+  padding:10px 14px;
+}
+
+/* ── Section label ──────────────────────────────────────────────────────── */
+.section-label{
+  color:var(--fyeox-yellow);
+  font-weight:bold;
+  font-size:14px;
+  margin-bottom:8px;
+}
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+.toast{
+  position:fixed;
+  top:16px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#111;
+  border-radius:10px;
+  padding:8px 20px;
+  font-size:13px;
+  font-weight:bold;
+  z-index:900;
+  box-shadow:4px 4px 0 #000;
+  animation:bubbleFade .2s ease-out;
+  pointer-events:none;
+}
+
+/* ── Tag pill ───────────────────────────────────────────────────────────── */
+.tag{
+  font-size:9px;
+  border-radius:4px;
+  padding:1px 6px;
+  border:1px solid;
+}
+
+/* ── Scrollable list area ───────────────────────────────────────────────── */
+.scroll-area{
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+/* ── Tab bar ────────────────────────────────────────────────────────────── */
+.tab-bar{
+  display:flex;
+  gap:0;
+}
+.tab-btn{
+  flex:1;
+  padding:7px 0;
+  font-size:11px;
+  font-family:'Comic Sans MS',cursive;
+  font-weight:bold;
+  cursor:pointer;
+  border-radius:8px 8px 0 0;
+  transition:all .1s;
+}
+.tab-btn.active{
+  background:var(--fyeox-surface);
+  color:var(--fyeox-yellow);
+  border:2px solid var(--fyeox-yellow);
+  border-bottom:2px solid var(--fyeox-surface);
+}
+.tab-btn:not(.active){
+  background:#0D1218;
+  color:#556;
+  border:2px solid var(--fyeox-border);
+  border-bottom:2px solid var(--fyeox-border);
+}
+
+/* ── Tab panel ──────────────────────────────────────────────────────────── */
+.tab-panel{
+  background:var(--fyeox-surface);
+  border:3px solid var(--fyeox-yellow);
+  border-radius:0 0 12px 12px;
+  box-shadow:0 0 28px rgba(255,233,0,0.18),6px 6px 0 #000;
+  overflow:hidden;
+}
+
+/* ── Header title ───────────────────────────────────────────────────────── */
+.fyeox-title{
+  font-size:17px;
+  font-weight:bold;
+  color:var(--fyeox-yellow);
+  text-shadow:2px 2px 0 var(--fyeox-red);
+  letter-spacing:2px;
+  text-align:center;
+}
+.fyeox-tagline{
+  font-size:10px;
+  color:var(--fyeox-blue);
+  font-style:italic;
+  text-align:center;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+.fyeox-footer{
+  margin-top:8px;
+  font-size:11px;
+  text-align:center;
+}
+.fyeox-footer a{
+  color:var(--fyeox-yellow);
+  text-decoration:none;
+  font-weight:bold;
+}
+.fyeox-footer span{
+  color:var(--fyeox-blue);
+}
+
+/* ── Stage border ───────────────────────────────────────────────────────── */
+.stage-border{
+  border:3px solid var(--fyeox-yellow);
+  border-radius:12px;
+  box-shadow:6px 6px 0 #000;
+  overflow:hidden;
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes rockSway{0%,100%{transform:rotate(0deg)}50%{transform:rotate(1.8deg)}}
+@keyframes backUp{0%{transform:translateX(0)}100%{transform:translateX(var(--bk-x,80px))}}
+@keyframes caneShake{0%{transform:rotate(0deg)}25%{transform:rotate(-14deg) translate(-3px,-3px)}75%{transform:rotate(14deg) translate(3px,3px)}100%{transform:rotate(0deg)}}
+@keyframes barkShake{0%{transform:translate(0,0)}25%{transform:translate(-5px,-4px) rotate(-5deg)}75%{transform:translate(5px,3px) rotate(5deg)}100%{transform:translate(0,0)}}
+@keyframes growlShake{0%{transform:translateX(0)}25%{transform:translateX(-7px) rotate(-6deg)}75%{transform:translateX(7px) rotate(6deg)}100%{transform:translateX(0)}}
+@keyframes gasPulse{from{opacity:.7;transform:scale(.95)}to{opacity:1;transform:scale(1.05)}}
+@keyframes popIn{0%{transform:scale(0) rotate(-12deg);opacity:0}70%{transform:scale(1.2) rotate(4deg);opacity:1}100%{transform:scale(1) rotate(0deg);opacity:1}}
+@keyframes bubbleFade{from{opacity:0;transform:scale(.75)}to{opacity:1;transform:scale(1)}}
+@keyframes recPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,50,50,0)}50%{box-shadow:0 0 0 6px rgba(255,50,50,0.25)}}
+@keyframes stopBlink{0%,100%{opacity:1}50%{opacity:0.5}}
+@keyframes vu{from{height:4px}to{height:18px}}
+@keyframes welcomePop{0%{transform:scale(0.88);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes modalSlide{0%{transform:translateY(30px);opacity:0}100%{transform:translateY(0);opacity:1}}

@@ -1,0 +1,10 @@
+# User cruft
+backup/
+exports/
+skits/
+
+# Editor cruft
+*.swp
+*~
+.DS_Store
+

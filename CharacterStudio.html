@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<!--
+  FYEOXSkits — CharacterStudio v0.1.0
+  Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg/FYEOXSkits
+  GNU Affero General Public License v3 or later.
+  Requires: style.css in the same folder.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FYEOX Character Studio</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="stylesheet" href="style.css"/>
+<style>
+#root{min-height:100vh;}
+.preview-stage{background:radial-gradient(ellipse at top,#1a2838,#0d1520);border-radius:10px;overflow:hidden;}
+.mode-btn{padding:5px 12px;font-size:11px;border-radius:6px;cursor:pointer;font-family:'Comic Sans MS',cursive;font-weight:bold;border:2px solid;}
+.mode-btn.active{background:#FFE90022;color:#FFE900;border-color:#FFE900;}
+.mode-btn:not(.active){background:#0A0E1A;color:#556;border-color:#2A2D44;}
+.field-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.field-label{font-size:10px;color:#8ABACC;white-space:nowrap;width:90px;flex-shrink:0;}
+.field-input{background:#080C16;color:#C8CAD8;border:1.5px solid #2A2D44;border-radius:6px;padding:4px 8px;font-size:11px;font-family:'Comic Sans MS',cursive;outline:none;flex:1;}
+.field-input:focus{border-color:#FFE900;}
+.field-input.mono{font-family:monospace;color:#FFE900;}
+.anim-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;}
+.anim-label{font-size:10px;color:#8ABACC;width:80px;flex-shrink:0;}
+.anim-val{width:70px;background:#080C16;color:#8ABACC;border:1.5px solid #2A2D44;border-radius:5px;padding:3px 6px;font-size:11px;font-family:monospace;outline:none;text-align:right;}
+.anim-unit{font-size:10px;color:#445;}
+.divider{height:1px;background:#1A2838;margin:10px 0;}
+textarea.field-input{resize:vertical;line-height:1.5;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useRef,useEffect,useMemo}=React;
+const CS_VERSION="0.1.0";
+const LS_CHAR_LIB="fyeox_char_lib_v3";
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+function downloadFile(content,filename,type="text/plain"){
+  const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+function newChar(){
+  return{
+    _type:"fyeox_character",_version:CS_VERSION,
+    id:"new_char",name:"New Character",emoji:"🎭",
+    species:"Unknown",color:"#888888",role:"Supporting",
+    traits:[],appearance:"",quirks:[],sounds:[],
+    bpos:{cx:270,cy:160,tailDir:"down-left"},
+    modes:["idle"],animations:[],
+    initial_mode:"idle",initial_state:null,
+    svg_component:"",svg_avatar:"",
+    author:"unixabg@gmail.com",created:new Date().toISOString().slice(0,10)
+  };
+}
+
+// Extract animation pixel values from svg_component keyframes
+function parseAnimValues(svg_component){
+  const vals={};
+  // Extract keyframe name -> content map to avoid cross-keyframe collisions
+  const kfMap={};
+  const kfRe=/(@keyframes (\w+)\{)(from|0%)\{transform:translateX\((-?[\d.]+)px\)\}(to|100%)\{transform:translateX\((-?[\d.]+)px\)\}\}/g;
+  let km;
+  while((km=kfRe.exec(svg_component))!==null){
+    kfMap[km[2]]={from:parseFloat(km[4]),to:parseFloat(km[6])};
+  }
+  // Identify the arrive keyframe (to value is 0, or closest to 0)
+  const arriveKf=Object.entries(kfMap).find(([,v])=>v.to===0)
+    ||Object.entries(kfMap).find(([,v])=>Math.abs(v.to)<Math.abs(v.from));
+  if(arriveKf){
+    const fromVal=arriveKf[1].from;
+    const toVal=arriveKf[1].to;
+    vals.arrive_from=Math.abs(fromVal);
+    vals.arrive_stop=toVal;
+    vals.arrive_dir=fromVal>0?"right":"left";
+    vals.arrive_name=arriveKf[0];
+  }else{vals.arrive_dir="right";vals.arrive_stop=0;}
+  vals.pos_x=0;
+  // Identify the leave keyframe (from value is 0, to is non-zero)
+  const leaveKf=Object.entries(kfMap).find(([,v])=>v.from===0&&v.to!==0);
+  if(leaveKf){
+    const toVal=leaveKf[1].to;
+    vals.leave_to=Math.abs(toVal);
+    vals.leave_dir=toVal>0?"right":"left";
+    vals.leave_name=leaveKf[0];
+  }else{vals.leave_dir="left";}
+  return vals;
+}
+
+// Update a specific keyframe value in svg_component
+function patchAnimValue(svg_component,key,val){
+  let c=svg_component;
+  const av=parseAnimValues(c);
+  if(key==="arrive_from"&&av.arrive_name){
+    const dir=av.arrive_dir==="left"?-1:1;
+    const re=new RegExp("(@keyframes "+av.arrive_name+"\\{)(from|0%)\\{transform:translateX\\((-?[\\d.]+)px\\)\\}");
+    c=c.replace(re,(_,hd,pct)=>hd+pct+"{transform:translateX("+(dir*val)+"px)}");
+  }
+  if(key==="arrive_dir"&&av.arrive_name){
+    const dist=av.arrive_from||320;
+    const sign=val==="left"?-1:1;
+    const re=new RegExp("(@keyframes "+av.arrive_name+"\\{)(from|0%)\\{transform:translateX\\((-?[\\d.]+)px\\)\\}");
+    c=c.replace(re,(_,hd,pct)=>hd+pct+"{transform:translateX("+(sign*dist)+"px)}");
+  }
+  if(key==="arrive_stop"&&av.arrive_name){
+    // Patch the "to" value of the arrive keyframe — where the char stops on stage
+    const re=new RegExp("(@keyframes "+av.arrive_name+"\\{(?:from|0%)\\{transform:translateX\\(-?[\\d.]+px\\)\\})(to|100%)\\{transform:translateX\\((-?[\\d.]+)px\\)\\}\\}");
+    c=c.replace(re,(_,hd,pct)=>hd+pct+"{transform:translateX("+val+"px)}}");
+  }
+  if(key==="leave_to"&&av.leave_name){
+    const dir=av.leave_dir==="right"?1:-1;
+    const re=new RegExp("(@keyframes "+av.leave_name+"\\{(?:from|0%)\\{transform:translateX\\(0px\\)\\})(to|100%)\\{transform:translateX\\((-?[\\d.]+)px\\)\\}\\}");
+    c=c.replace(re,(_,hd,pct)=>hd+pct+"{transform:translateX("+(dir*val)+"px)}}");
+  }
+  if(key==="leave_dir"&&av.leave_name){
+    const dist=av.leave_to||600;
+    const sign=val==="right"?1:-1;
+    const re=new RegExp("(@keyframes "+av.leave_name+"\\{(?:from|0%)\\{transform:translateX\\(0px\\)\\})(to|100%)\\{transform:translateX\\((-?[\\d.]+)px\\)\\}\\}");
+    c=c.replace(re,(_,hd,pct)=>hd+pct+"{transform:translateX("+(sign*dist)+"px)}}");
+  }
+  return c;
+}
+
+// ── Preview component ────────────────────────────────────────────────────
+function Preview({char,activeMode,posXOverride=0}){
+  const [Comp,setComp]=useState(null);
+  const [err,setErr]=useState(null);
+
+  useEffect(()=>{
+    if(!char.svg_component){setComp(null);setErr(null);return;}
+    try{
+      const code=Babel.transform("("+char.svg_component+")",{presets:["react"]}).code;
+      const C=eval(code);
+      setComp(()=>C);setErr(null);
+    }catch(e){setComp(null);setErr(e.message);}
+  },[char.svg_component]);
+
+  return(
+    <div>
+      <div className="preview-stage" style={{width:"100%",aspectRatio:"540/320",position:"relative"}}>
+        <svg viewBox="0 0 540 320" style={{width:"100%",height:"100%",display:"block"}}>
+          {/* Simple background */}
+          <rect width="540" height="320" fill="#1a2838"/>
+          <rect x="0" y="220" width="540" height="100" fill="#27AE60" opacity="0.3"/>
+          <line x1="0" y1="220" x2="540" y2="220" stroke="#2ECC71" strokeWidth="1" opacity="0.4"/>
+          {/* Bubble position crosshair */}
+          {char.bpos&&(
+            <g opacity="0.5">
+              <circle cx={char.bpos.cx} cy={char.bpos.cy} r="8" fill="none" stroke="#FFE900" strokeWidth="1.5" strokeDasharray="3,3"/>
+              <line x1={char.bpos.cx-12} y1={char.bpos.cy} x2={char.bpos.cx+12} y2={char.bpos.cy} stroke="#FFE900" strokeWidth="1" opacity="0.7"/>
+              <line x1={char.bpos.cx} y1={char.bpos.cy-12} x2={char.bpos.cx} y2={char.bpos.cy+12} stroke="#FFE900" strokeWidth="1" opacity="0.7"/>
+              <text x={char.bpos.cx+14} y={char.bpos.cy+4} fontSize="9" fill="#FFE900" fontFamily="'Comic Sans MS',cursive">bubble</text>
+            </g>
+          )}
+          {/* Character */}
+          {Comp&&<Comp mode={activeMode} state={char.initial_state||null} params={{pos_x:posXOverride}}/>}
+          {!Comp&&!err&&(
+            <text x="270" y="160" textAnchor="middle" fontSize="13" fill="#445" fontFamily="'Comic Sans MS',cursive">No SVG component loaded</text>
+          )}
+          {err&&(
+            <foreignObject x="20" y="20" width="500" height="280">
+              <div style={{color:"#FF6666",fontSize:10,fontFamily:"monospace",background:"rgba(0,0,0,0.7)",padding:8,borderRadius:6,lineHeight:1.5}}>
+                ⚠ Compile error:<br/>{err}
+              </div>
+            </foreignObject>
+          )}
+        </svg>
+      </div>
+      {/* Avatar preview */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8}}>
+        <span style={{fontSize:10,color:"#556"}}>Avatar:</span>
+        <AvatarPreview svg_avatar={char.svg_avatar}/>
+        <span style={{fontSize:10,color:"#556",marginLeft:8}}>Emoji fallback:</span>
+        <span style={{fontSize:22}}>{char.emoji||"🎭"}</span>
+      </div>
+    </div>
+  );
+}
+
+function AvatarPreview({svg_avatar}){
+  const [Comp,setComp]=useState(null);
+  useEffect(()=>{
+    if(!svg_avatar){setComp(null);return;}
+    try{const code=Babel.transform("("+svg_avatar+")",{presets:["react"]}).code;setComp(()=>eval(code));}
+    catch(e){setComp(null);}
+  },[svg_avatar]);
+  if(Comp)return <Comp/>;
+  return <span style={{fontSize:10,color:"#445",fontStyle:"italic"}}>no avatar</span>;
+}
+
+// ── Metadata tab ─────────────────────────────────────────────────────────
+function MetaTab({char,onChange}){
+  function set(k,v){onChange({...char,[k]:v});}
+  function setArr(k,raw){onChange({...char,[k]:raw.split(",").map(s=>s.trim()).filter(Boolean)});}
+
+  return(
+    <div style={{padding:12,display:"flex",flexDirection:"column",gap:4}}>
+      <div className="field-row">
+        <span className="field-label">ID</span>
+        <input className="field-input mono" value={char.id} onChange={e=>set("id",e.target.value.toLowerCase().replace(/\s+/g,"_"))}/>
+      </div>
+      <div className="field-row">
+        <span className="field-label">Name</span>
+        <input className="field-input" value={char.name} onChange={e=>set("name",e.target.value)}/>
+        <input className="field-input" value={char.emoji} onChange={e=>set("emoji",e.target.value)} style={{width:50,textAlign:"center"}} placeholder="🎭"/>
+      </div>
+      <div className="field-row">
+        <span className="field-label">Species</span>
+        <input className="field-input" value={char.species||""} onChange={e=>set("species",e.target.value)}/>
+      </div>
+      <div className="field-row">
+        <span className="field-label">Role</span>
+        <input className="field-input" value={char.role||""} onChange={e=>set("role",e.target.value)} placeholder="Protagonist, Supporting, Vehicle…"/>
+      </div>
+      <div className="field-row">
+        <span className="field-label">Color</span>
+        <input type="color" value={char.color||"#888888"} onChange={e=>set("color",e.target.value)} style={{width:40,height:28,border:"none",background:"none",cursor:"pointer",padding:0}}/>
+        <input className="field-input mono" value={char.color||"#888888"} onChange={e=>set("color",e.target.value)} style={{width:90}}/>
+        <span style={{fontSize:10,color:"#556",marginLeft:4}}>used for UI accents</span>
+      </div>
+      <div className="divider"/>
+      <div className="field-row">
+        <span className="field-label">Traits</span>
+        <input className="field-input" value={Array.isArray(char.traits)?char.traits.join(", "):char.traits||""} onChange={e=>setArr("traits",e.target.value)} placeholder="brave, funny, stubborn"/>
+      </div>
+      <div className="field-row">
+        <span className="field-label">Quirks</span>
+        <input className="field-input" value={Array.isArray(char.quirks)?char.quirks.join(", "):char.quirks||""} onChange={e=>setArr("quirks",e.target.value)} placeholder="sniffs everything, always late"/>
+      </div>
+      <div className="field-row">
+        <span className="field-label">Sounds</span>
+        <input className="field-input" value={(char.sounds||[]).join(", ")} onChange={e=>setArr("sounds",e.target.value)} placeholder="bark, growl, fart"/>
+      </div>
+      <div className="field-row" style={{alignItems:"flex-start"}}>
+        <span className="field-label" style={{marginTop:4}}>Appearance</span>
+        <textarea className="field-input" rows={3} value={char.appearance||""} onChange={e=>set("appearance",e.target.value)} placeholder="Physical description…"/>
+      </div>
+      <div className="divider"/>
+      <div className="field-row">
+        <span className="field-label">Initial mode</span>
+        <select className="field-input" value={char.initial_mode||""} onChange={e=>set("initial_mode",e.target.value)}>
+          <option value="">— none —</option>
+          {(char.modes||[]).map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+      <div className="field-row">
+        <span className="field-label">Initial state</span>
+        <input className="field-input" value={char.initial_state||""} onChange={e=>set("initial_state",e.target.value||null)} placeholder="hidden, emerging… (leave blank for none)"/>
+      </div>
+    </div>
+  );
+}
+
+// ── Modes tab ────────────────────────────────────────────────────────────
+function ModesTab({char,onChange,activeMode,setActiveMode}){
+  const [newMode,setNewMode]=useState("");
+  function addMode(){
+    const m=newMode.trim().toLowerCase().replace(/\s+/g,"_");
+    if(!m||char.modes.includes(m))return;
+    onChange({...char,modes:[...char.modes,m]});setNewMode("");
+  }
+  function removeMode(m){
+    if(char.modes.length<=1){return;}
+    const modes=char.modes.filter(x=>x!==m);
+    const updates={modes};
+    if(char.initial_mode===m)updates.initial_mode=modes[0];
+    onChange({...char,...updates});
+    if(activeMode===m)setActiveMode(modes[0]);
+  }
+  function moveMode(i,dir){
+    const modes=[...char.modes];
+    const ni=i+dir;if(ni<0||ni>=modes.length)return;
+    [modes[i],modes[ni]]=[modes[ni],modes[i]];
+    onChange({...char,modes});
+  }
+
+  // Animation values editor
+  const animVals=useMemo(()=>parseAnimValues(char.svg_component||""),[char.svg_component]);
+  function patchAnim(key,val){
+    const newComp=patchAnimValue(char.svg_component||"",key,val);
+    onChange({...char,svg_component:newComp});
+  }
+  const hasArrive=(char.modes||[]).includes("arrive");
+  const hasLeave=(char.modes||[]).includes("leave");
+
+  return(
+    <div style={{padding:12,display:"flex",flexDirection:"column",gap:12}}>
+      {/* Mode list */}
+      <div>
+        <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>Modes — click to preview in stage</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+          {(char.modes||[]).map((m,i)=>(
+            <div key={m} style={{display:"flex",alignItems:"center",gap:3}}>
+              <button className={"mode-btn"+(activeMode===m?" active":"")} onClick={()=>setActiveMode(m)}>{m}</button>
+              <button onClick={()=>moveMode(i,-1)} disabled={i===0}
+                style={{padding:"2px 5px",fontSize:10,background:"#0A0E1A",color:i===0?"#222":"#8ABACC",border:"1px solid #2A2D44",borderRadius:4,cursor:i===0?"default":"pointer",opacity:i===0?0.3:1}}>▲</button>
+              <button onClick={()=>moveMode(i,1)} disabled={i===char.modes.length-1}
+                style={{padding:"2px 5px",fontSize:10,background:"#0A0E1A",color:i===char.modes.length-1?"#222":"#8ABACC",border:"1px solid #2A2D44",borderRadius:4,cursor:i===char.modes.length-1?"default":"pointer",opacity:i===char.modes.length-1?0.3:1}}>▼</button>
+              {char.modes.length>1&&<button onClick={()=>removeMode(m)}
+                style={{padding:"2px 5px",fontSize:10,background:"#2A0A0A",color:"#FF6666",border:"1px solid #661111",borderRadius:4,cursor:"pointer"}}>✕</button>}
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <input value={newMode} onChange={e=>setNewMode(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&addMode()}
+            placeholder="new mode name…"
+            style={{flex:1,background:"#080C16",color:"#C8CAD8",border:"1.5px solid #2A2D44",borderRadius:6,padding:"4px 8px",fontSize:11,fontFamily:"'Comic Sans MS',cursive",outline:"none"}}/>
+          <button className="btn" onClick={addMode} style={{padding:"4px 12px",fontSize:11,background:"#0A1A0A",color:"#2ECC71",border:"1px solid #2ECC71"}}>+ Add</button>
+        </div>
+      </div>
+      <div className="divider"/>
+      {/* Bubble position */}
+      <div>
+        <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>💬 Bubble position — yellow crosshair in preview</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          <div className="anim-row">
+            <span className="anim-label">cx (horizontal)</span>
+            <input type="range" min="20" max="520" value={char.bpos?.cx||270}
+              onChange={e=>onChange({...char,bpos:{...char.bpos,cx:Number(e.target.value)}})}
+              style={{width:120,accentColor:"#FFE900"}}/>
+            <input className="anim-val" type="number" value={char.bpos?.cx||270}
+              onChange={e=>onChange({...char,bpos:{...char.bpos,cx:Number(e.target.value)}})}/>
+            <span className="anim-unit">px</span>
+          </div>
+          <div className="anim-row">
+            <span className="anim-label">cy (vertical)</span>
+            <input type="range" min="10" max="310" value={char.bpos?.cy||160}
+              onChange={e=>onChange({...char,bpos:{...char.bpos,cy:Number(e.target.value)}})}
+              style={{width:120,accentColor:"#FFE900"}}/>
+            <input className="anim-val" type="number" value={char.bpos?.cy||160}
+              onChange={e=>onChange({...char,bpos:{...char.bpos,cy:Number(e.target.value)}})}/>
+            <span className="anim-unit">px</span>
+          </div>
+          <div className="anim-row">
+            <span className="anim-label">tail direction</span>
+            <select value={char.bpos?.tailDir||"down-left"}
+              onChange={e=>onChange({...char,bpos:{...char.bpos,tailDir:e.target.value}})}
+              style={{background:"#080C16",color:"#8ABACC",border:"1.5px solid #2A2D44",borderRadius:5,padding:"3px 6px",fontSize:11,fontFamily:"'Comic Sans MS',cursive",outline:"none"}}>
+              <option value="down-left">down-left</option>
+              <option value="down-right">down-right</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div className="divider"/>
+      <div>
+        <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>📍 Default stage position (pos_x)</div>
+        <div className="anim-row">
+          <span className="anim-label">pos_x default</span>
+          <input type="range" min="-300" max="300" value={char._pos_x_default||0}
+            onChange={e=>onChange({...char,_pos_x_default:Number(e.target.value)})}
+            style={{width:140,accentColor:"#FFE900"}}/>
+          <input className="anim-val" type="number" value={char._pos_x_default||0}
+            onChange={e=>onChange({...char,_pos_x_default:Number(e.target.value)})}/>
+          <span className="anim-unit">px</span>
+        </div>
+        <div style={{fontSize:9,color:"#445",marginTop:4,fontStyle:"italic"}}>
+          0 = drawn position. Override per-beat in skit with params: {"{"}pos_x: N{"}"}. Preview updates live.
+        </div>
+      </div>
+      {/* Animation values */}
+      {(hasArrive||hasLeave)&&char.svg_component&&(
+        <>
+          <div className="divider"/>
+          <div>
+            <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>🎬 Animation distances &amp; directions</div>
+            {hasArrive&&(
+              <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
+                <div className="anim-row">
+                  <span className="anim-label">arrive from</span>
+                  <select value={animVals.arrive_dir||"right"} onChange={e=>patchAnim("arrive_dir",e.target.value)}
+                    style={{background:"#080C16",color:"#8ABACC",border:"1.5px solid #2A2D44",borderRadius:5,padding:"3px 6px",fontSize:11,fontFamily:"'Comic Sans MS',cursive",outline:"none",width:70}}>
+                    <option value="right">from right</option>
+                    <option value="left">from left</option>
+                  </select>
+                  <input type="range" min="100" max="1200" value={animVals.arrive_from||320}
+                    onChange={e=>patchAnim("arrive_from",Number(e.target.value))}
+                    style={{width:100,accentColor:"#8ABACC"}}/>
+                  <input className="anim-val" type="number" value={animVals.arrive_from||320}
+                    onChange={e=>patchAnim("arrive_from",Number(e.target.value))}/>
+                  <span className="anim-unit">px</span>
+                </div>
+                <div className="anim-row">
+                  <span className="anim-label">stop position</span>
+                  <input type="range" min="-300" max="300" value={animVals.arrive_stop||0}
+                    onChange={e=>patchAnim("arrive_stop",Number(e.target.value))}
+                    style={{width:140,accentColor:"#FFE900"}}/>
+                  <input className="anim-val" type="number" value={animVals.arrive_stop||0}
+                    onChange={e=>patchAnim("arrive_stop",Number(e.target.value))}/>
+                  <span className="anim-unit">px offset</span>
+                </div>
+                <div style={{fontSize:9,color:"#445",marginLeft:84}}>0 = drawn position · negative = further left · positive = further right</div>
+              </div>
+            )}
+            {hasLeave&&(
+              <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
+                <div className="anim-row">
+                  <span className="anim-label">leave to</span>
+                  <select value={animVals.leave_dir||"left"} onChange={e=>patchAnim("leave_dir",e.target.value)}
+                    style={{background:"#080C16",color:"#8ABACC",border:"1.5px solid #2A2D44",borderRadius:5,padding:"3px 6px",fontSize:11,fontFamily:"'Comic Sans MS',cursive",outline:"none",width:70}}>
+                    <option value="left">exit left</option>
+                    <option value="right">exit right</option>
+                  </select>
+                  <input type="range" min="100" max="1200" value={animVals.leave_to||600}
+                    onChange={e=>patchAnim("leave_to",Number(e.target.value))}
+                    style={{width:100,accentColor:"#8ABACC"}}/>
+                  <input className="anim-val" type="number" value={animVals.leave_to||600}
+                    onChange={e=>patchAnim("leave_to",Number(e.target.value))}/>
+                  <span className="anim-unit">px</span>
+                </div>
+              </div>
+            )}
+            <div style={{fontSize:9,color:"#445",marginTop:4,fontStyle:"italic"}}>
+              Tips: stage is 540px wide · arrive distance should start offscreen · stop position 0 = drawn position · leave distance should exceed character x-position.
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── SVG tab ───────────────────────────────────────────────────────────────
+function SvgTab({char,onChange}){
+  const [compDraft,setCompDraft]=useState(char.svg_component||"");
+  const [avDraft,setAvDraft]=useState(char.svg_avatar||"");
+  const [compErr,setCompErr]=useState(null);
+  const [avErr,setAvErr]=useState(null);
+
+  function applyComp(){
+    try{Babel.transform("("+compDraft+")",{presets:["react"]});onChange({...char,svg_component:compDraft});setCompErr(null);}
+    catch(e){setCompErr(e.message);}
+  }
+  function applyAv(){
+    // Remove xmlns if present — invalid in JSX
+    const cleaned=avDraft.replace(/ xmlns="[^"]*"/g,"");
+    try{Babel.transform("("+cleaned+")",{presets:["react"]});onChange({...char,svg_avatar:cleaned});setAvErr(null);}
+    catch(e){setAvErr(e.message);}
+  }
+
+  return(
+    <div style={{padding:12,display:"flex",flexDirection:"column",gap:10}}>
+      <div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <span style={{fontSize:10,color:"#8ABACC"}}>svg_component — JSX arrow function ({"{"}mode,state{"}"}) =&gt; (&lt;g&gt;...&lt;/g&gt;)</span>
+          <button className="btn" onClick={applyComp} style={{padding:"3px 10px",fontSize:10,background:"#0A1A0A",color:"#2ECC71",border:"1px solid #2ECC71"}}>✓ Apply</button>
+        </div>
+        <textarea value={compDraft} onChange={e=>setCompDraft(e.target.value)} rows={10}
+          style={{width:"100%",background:"#080C16",color:"#FFE900",border:"1.5px solid "+(compErr?"#882200":"#2A3A50"),borderRadius:6,padding:"6px 8px",fontSize:10,fontFamily:"monospace",outline:"none",resize:"vertical",lineHeight:1.5}}/>
+        {compErr&&<div style={{fontSize:9,color:"#FF6666",marginTop:2}}>⚠ {compErr}</div>}
+      </div>
+      <div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <span style={{fontSize:10,color:"#8ABACC"}}>svg_avatar — JSX arrow function () =&gt; (&lt;svg width="44" height="44"&gt;...&lt;/svg&gt;)</span>
+          <button className="btn" onClick={applyAv} style={{padding:"3px 10px",fontSize:10,background:"#0A1A0A",color:"#2ECC71",border:"1px solid #2ECC71"}}>✓ Apply</button>
+        </div>
+        <textarea value={avDraft} onChange={e=>setAvDraft(e.target.value)} rows={5}
+          style={{width:"100%",background:"#080C16",color:"#FFE900",border:"1.5px solid "+(avErr?"#882200":"#2A3A50"),borderRadius:6,padding:"6px 8px",fontSize:10,fontFamily:"monospace",outline:"none",resize:"vertical",lineHeight:1.5}}/>
+        {avErr&&<div style={{fontSize:9,color:"#FF6666",marginTop:2}}>⚠ {avErr}</div>}
+        <div style={{fontSize:9,color:"#445",marginTop:2,fontStyle:"italic"}}>Note: xmlns="..." is automatically removed — invalid in JSX.</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────
+function App(){
+  const [char,setChar]=useState(newChar);
+  const [tab,setTab]=useState("meta");
+  const [activeMode,setActiveMode]=useState("idle");
+  const [toast,setToast]=useState(null);
+  const [dirty,setDirty]=useState(false);
+
+  function showToast(msg,color="#FFE900"){setToast({msg,color});setTimeout(()=>setToast(null),3000);}
+
+  function updateChar(c){
+    setChar(c);setDirty(true);
+    // Keep active mode valid
+    if(!(c.modes||[]).includes(activeMode))setActiveMode((c.modes||[])[0]||"idle");
+  }
+
+  // Auto-zoom to viewport width
+  useEffect(()=>{
+    const DESIGN_WIDTH=1280,MIN=0.55,MAX=1.4;
+    function applyZoom(){document.documentElement.style.zoom=String(Math.min(MAX,Math.max(MIN,window.innerWidth/DESIGN_WIDTH)));}
+    applyZoom();window.addEventListener("resize",applyZoom);
+    return()=>{window.removeEventListener("resize",applyZoom);document.documentElement.style.zoom="";};
+  },[]);
+
+  function doLoad(){
+    const inp=document.createElement("input");inp.type="file";inp.accept=".char,.json";
+    inp.onchange=e=>{
+      const file=e.target.files[0];if(!file)return;
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        try{
+          const d=JSON.parse(ev.target.result);
+          if(d._type!=="fyeox_character")throw new Error("Not a valid .char file");
+          setChar(d);setDirty(false);
+          setActiveMode(d.initial_mode||(d.modes||[])[0]||"idle");
+          setTab("meta");showToast("📂 "+d.name+" loaded!","#2ECC71");
+        }catch(err){alert("Could not load .char file.\n"+err.message);}
+      };reader.readAsText(file);
+    };inp.click();
+  }
+
+  function doSave(){
+    const out={...char,_version:CS_VERSION,created:char.created||new Date().toISOString().slice(0,10)};
+    // Normalise arrays
+    if(typeof out.traits==="string")out.traits=out.traits.split(",").map(s=>s.trim()).filter(Boolean);
+    if(typeof out.quirks==="string")out.quirks=out.quirks.split(",").map(s=>s.trim()).filter(Boolean);
+    // Clear empty initial_state
+    if(!out.initial_state)out.initial_state=null;
+    const json=JSON.stringify(out,null,2);
+    downloadFile(json,(char.id||"char")+".char","application/json");
+    setDirty(false);showToast("💾 "+char.name+".char saved!","#2ECC71");
+  }
+
+  function doSaveToLib(){
+    try{
+      const lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");
+      lib[char.id]=char;localStorage.setItem(LS_CHAR_LIB,JSON.stringify(lib));
+      showToast("📚 Saved to library!","#8ABACC");
+    }catch(e){showToast("Failed to save to library","#FF6666");}
+  }
+
+  function doNew(){
+    if(dirty&&!window.confirm("Unsaved changes — start fresh anyway?"))return;
+    setChar(newChar());setDirty(false);setActiveMode("idle");setTab("meta");
+  }
+
+  const TABS=[
+    {id:"meta",label:"📋 Info"},
+    {id:"modes",label:"🎬 Modes & Position"},
+    {id:"svg",label:"⚙️ SVG Code"},
+  ];
+
+  const SF={fontFamily:"'Comic Sans MS',cursive"};
+
+  return(
+    <div style={{minHeight:"100dvh",background:"radial-gradient(ellipse at top,#1a2838,#0d1520)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",padding:"8px 8px 4px",...SF}}>
+      {toast&&<div className="toast" style={{border:"2px solid "+toast.color,color:toast.color}}>{toast.msg}</div>}
+
+      {/* Header */}
+      <div className="fyeox-title" style={{marginBottom:1}}>🎨 FYEOX Character Studio</div>
+      <div className="fyeox-tagline" style={{marginBottom:6}}>Design, tune, and save your characters.</div>
+
+      {/* Toolbar */}
+      <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap",justifyContent:"center"}}>
+        <button className="btn" onClick={doNew} style={{padding:"5px 12px",fontSize:11,background:"#1A1A2A",color:"#8ABACC",border:"1px solid #2A2D44"}}>✨ New</button>
+        <button className="btn" onClick={doLoad} style={{padding:"5px 12px",fontSize:11,background:"#0A1A3A",color:"#7ABAFF",border:"1px solid #2255AA",boxShadow:"2px 2px 0 #000"}}>📂 Load .char</button>
+        <button className="btn" onClick={doSave} style={{padding:"5px 12px",fontSize:11,background:"#0A2A0A",color:"#2ECC71",border:"1px solid #2ECC71",boxShadow:"2px 2px 0 #000"}}>💾 Save .char</button>
+        <button className="btn" onClick={doSaveToLib} style={{padding:"5px 12px",fontSize:11,background:"#0A1A2A",color:"#8ABACC",border:"1px solid #2A4A6A",boxShadow:"2px 2px 0 #000"}}>📚 Save to Library</button>
+        {dirty&&<span style={{fontSize:10,color:"#FFE900",alignSelf:"center"}}>● unsaved</span>}
+      </div>
+
+      {/* Char name badge */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+        <span style={{fontSize:22}}>{char.emoji||"🎭"}</span>
+        <span style={{fontSize:15,fontWeight:"bold",color:char.color||"#FFE900"}}>{char.name||"New Character"}</span>
+        <span style={{fontSize:10,color:"#556"}}>{char.id}</span>
+        <span style={{fontSize:10,color:"#445",background:"#0A0E1A",border:"1px solid #2A2D44",borderRadius:4,padding:"1px 6px"}}>{char.species||"?"}</span>
+      </div>
+
+      {/* Two-column layout: preview left, editor right */}
+      <div style={{display:"flex",gap:10,width:"100%",maxWidth:960,alignItems:"flex-start"}}>
+
+        {/* Left: Preview */}
+        <div style={{width:340,flexShrink:0}}>
+          <div className="card" style={{padding:10}}>
+            <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>
+              Preview — mode: <span style={{color:"#FFE900",fontWeight:"bold"}}>{activeMode}</span>
+            </div>
+            <Preview char={char} activeMode={activeMode} posXOverride={char._pos_x_default||0}/>
+            {/* Quick mode switcher */}
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:8}}>
+              {(char.modes||[]).map(m=>(
+                <button key={m} className={"mode-btn"+(activeMode===m?" active":"")} onClick={()=>setActiveMode(m)}>{m}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Editor tabs */}
+        <div style={{flex:1,minWidth:0}}>
+          {/* Tab bar */}
+          <div className="tab-bar">
+            {TABS.map(t=>(
+              <button key={t.id} className={"tab-btn"+(tab===t.id?" active":"")} onClick={()=>setTab(t.id)}
+                dangerouslySetInnerHTML={{__html:t.label}}/>
+            ))}
+          </div>
+          <div className="tab-panel" style={{maxHeight:"calc(100dvh - 200px)",overflowY:"auto"}}>
+            {tab==="meta"&&<MetaTab char={char} onChange={updateChar}/>}
+            {tab==="modes"&&<ModesTab char={char} onChange={updateChar} activeMode={activeMode} setActiveMode={setActiveMode}/>}
+            {tab==="svg"&&<SvgTab char={char} onChange={updateChar}/>}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="fyeox-footer" style={{marginTop:8}}>
+        <a href="https://github.com/unixabg/FYEOXSkits/" target="_blank" rel="noreferrer" title="Project page on GitHub">v{CS_VERSION}</a>
+        <span> &nbsp;&bull;&nbsp; FYEOX Character Studio &nbsp;&bull;&nbsp; fyeox.com &nbsp;&bull;&nbsp; AGPL-3.0</span>
+      </div>
+    </div>
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
