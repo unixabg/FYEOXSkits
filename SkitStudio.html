@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  FYEOXSkits — SkitStudio v0.5.1
+  FYEOXSkits — SkitStudio v0.5.2
   Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg
   GNU Affero General Public License v3 or later.
 -->
@@ -18,7 +18,7 @@
 <div id="root"></div>
 <script type="text/babel">
 const {useState,useRef,useEffect}=React;
-const STUDIO_VERSION="0.5.1";
+const STUDIO_VERSION="0.5.2";
 const LS_LAST_SKIT="fyeox_last_skit_v3";
 const LS_CHAR_LIB="fyeox_char_lib_v3";
 
@@ -38,7 +38,7 @@ function playAudio(url){return new Promise(r=>{if(!url){r();return;}const a=new 
 function speakFallback(text,opts={}){return new Promise(r=>{if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=opts.pitch??1;u.rate=opts.rate??1;u.onend=r;u.onerror=()=>setTimeout(r,500);setTimeout(()=>window.speechSynthesis.speak(u),60);});}
 function blobToB64(blob){return new Promise(r=>{const fr=new FileReader();fr.onloadend=()=>r(fr.result);fr.readAsDataURL(blob);});}
 function b64ToUrl(b64){try{const arr=b64.split(","),mime=arr[0].match(/:(.*?);/)[1],bstr=atob(arr[1]),u8=new Uint8Array(bstr.length);for(let i=0;i<bstr.length;i++)u8[i]=bstr.charCodeAt(i);return URL.createObjectURL(new Blob([u8],{type:mime}));}catch(e){return null;}}
-function serializeSkit(title,episode,characters,lines,audioB64Map){
+function serializeSkit(title,episode,characters,lines,audioB64Map,bgSrc){
   return JSON.stringify({_type:"fyeox_skit",_version:STUDIO_VERSION,title,episode,version:1,
     created:new Date().toISOString().slice(0,10),characters,
     lines:lines.map(l=>({id:l.id,char:l.char,text:l.text,mode:l.mode,bubble:l.bubble,tts:l.tts,
@@ -46,12 +46,12 @@ function serializeSkit(title,episode,characters,lines,audioB64Map){
       effects_before:l.effects_before,effects_after:l.effects_after,
       duration:l.duration,pre_delay:l.pre_delay,post_delay:l.post_delay,
       params:l.params,recordable:l.recordable,color:l.color,emoji:l.emoji})),
-    audio:audioB64Map},null,2);
+    audio:audioB64Map,bg_src:bgSrc||""},null,2);
 }
 function parseSkit(json){
   const d=JSON.parse(json);
   if(d._type!=="fyeox_skit") throw new Error("Not a valid v0.4.0 .skit file (got type: "+d._type+")");
-  return {title:d.title||"Untitled",episode:d.episode||1,characters:d.characters||{},lines:d.lines||[],audio:d.audio||{}};
+  return {title:d.title||"Untitled",episode:d.episode||1,characters:d.characters||{},lines:d.lines||[],audio:d.audio||{},bg_src:d.bg_src||""};
 }
 function serializeChar(charDef){
   const traits=Array.isArray(charDef.traits)?charDef.traits:(charDef.traits||"").split(",").map(t=>t.trim()).filter(Boolean);
@@ -606,7 +606,7 @@ function App(){
     if(appViewRef.current!=="studio")return;
     clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current=setTimeout(()=>{
-      try{localStorage.setItem(LS_LAST_SKIT,serializeSkit(skitTitle,skitEpisode,skitCharsRef.current,linesRef.current,audioB64.current));setSaveStatus("saved");setTimeout(()=>setSaveStatus("idle"),2000);}
+      try{localStorage.setItem(LS_LAST_SKIT,serializeSkit(skitTitle,skitEpisode,skitCharsRef.current,linesRef.current,audioB64.current,bgSrcRef.current));setSaveStatus("saved");setTimeout(()=>setSaveStatus("idle"),2000);}
       catch(e){setSaveStatus("error");}
     },800);
   }
@@ -629,6 +629,8 @@ function App(){
     const _merged={...d.characters||{}};
     Object.keys(_merged).forEach(id=>{if(_lib[id])_merged[id]=_lib[id];});
     setSkitChars(_merged);compileAndInitChars(_merged);
+    if(d.bg_src){try{const code=Babel.transform("("+d.bg_src+")",{presets:["react"]}).code;setBgComp(()=>eval(code));bgSrcRef.current=d.bg_src;}catch(e){console.warn("bg restore fail",e);}}
+    else{setBgComp(null);bgSrcRef.current="";}
   }
   function openFilePicker(cb){
     const inp=document.createElement("input");inp.type="file";inp.accept=".skit,.json";
@@ -653,10 +655,11 @@ function App(){
     setSkitChars({});compileAndInitChars({});
     setSkitTitle("New Skit");setSkitEpisode(1);
     setLines([]);linesRef.current=[];origLines.current=[];audioB64.current={};setRecordings({});
+    setBgComp(null);bgSrcRef.current="";
     resetScene();showToast("✨ New skit started","#8ABACC");
   }
   function saveSkit(){
-    downloadFile(serializeSkit(skitTitle,skitEpisode,skitCharsRef.current,lines,audioB64.current),
+    downloadFile(serializeSkit(skitTitle,skitEpisode,skitCharsRef.current,lines,audioB64.current,bgSrcRef.current),
       skitTitle.replace(/[^a-z0-9]/gi,"_").toLowerCase()+"_ep"+skitEpisode+".skit","application/json");
     showToast("💾 Skit saved!","#2ECC71");
   }
@@ -1037,7 +1040,7 @@ function Viewer(){
         <button onClick={reset} style={{padding:"11px 20px",fontSize:16,...S,fontWeight:"bold",background:"#1A2838",color:"white",border:"3px solid #FFE900",borderRadius:10,cursor:"pointer",boxShadow:"4px 4px 0 #000"}}>&#8635; Reset<\/button>
       <\/div>
     <\/div>
-    <div style={{marginTop:8,fontSize:10,color:"#334"}}>Made with FYEOX SkitStudio v0.5.1 &bull; fyeox.com<\/div>
+    <div style={{marginTop:8,fontSize:10,color:"#334"}}>Made with FYEOX SkitStudio v0.5.2 &bull; fyeox.com<\/div>
   <\/div>);
 }
 const r=ReactDOM.createRoot(document.getElementById('r'));r.render(<Viewer\/>);
