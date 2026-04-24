@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  FYEOXSkits — SkitStudio v0.5.0
+  FYEOXSkits — SkitStudio v0.5.1
   Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg
   GNU Affero General Public License v3 or later.
 -->
@@ -18,7 +18,7 @@
 <div id="root"></div>
 <script type="text/babel">
 const {useState,useRef,useEffect}=React;
-const STUDIO_VERSION="0.5.0";
+const STUDIO_VERSION="0.5.1";
 const LS_LAST_SKIT="fyeox_last_skit_v3";
 const LS_CHAR_LIB="fyeox_char_lib_v3";
 
@@ -561,6 +561,7 @@ function App(){
   const [charModes,setCharModes]=useState(()=>{const m={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";});return m;});
   const [charStates,setCharStates]=useState(()=>{const s={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{s[id]=ch.initial_state||null;});return s;});
   const [charParams,setCharParams]=useState({});
+  const [charVisible,setCharVisible]=useState({});
   const [bubble,setBubble]=useState(null);
   const [gas,setGas]=useState(false);const [sfx,setSFX]=useState(null);
   const [playing,setPlaying]=useState(false);const [phase,setPhase]=useState("idle");
@@ -670,7 +671,7 @@ function App(){
   function resetScene(){
     cancelRef.current=true;if(previewRef.current)previewRef.current.pause();if(window.speechSynthesis)window.speechSynthesis.cancel();
     const m={},s={};Object.entries(skitCharsRef.current||{}).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});setCharModes(m);setCharStates(s);
-    setBubble(null);setGas(false);setSFX(null);setPlaying(false);setPhase("idle");setCharParams({});
+    setBubble(null);setGas(false);setSFX(null);setPlaying(false);setPhase("idle");setCharParams({});setCharVisible({});
   }
   async function playSkit(){
     if(playing)return;cancelRef.current=false;setPlaying(true);setPhase("playing");
@@ -680,7 +681,7 @@ function App(){
       if(!ok())break;
       if(beat.pre_delay){await wait(beat.pre_delay);if(!ok())break;}
       for(const eff of (beat.effects_before||[])){if(!ok())break;if(eff==="gas_on")setGas(true);else if(eff.startsWith("sfx:"))setSFX(eff.slice(4));else if(eff==="sound:fart")fart();else if(eff==="sound:bark")bark();else if(eff==="sound:thump")thump();}
-      if(beat.char&&beat.mode)setCharModes(m=>({...m,[beat.char]:beat.mode}));
+      if(beat.char&&beat.mode){setCharModes(m=>({...m,[beat.char]:beat.mode}));setCharVisible(v=>({...v,[beat.char]:true}));}
       if(beat.char&&beat.params!==undefined)setCharParams(p=>({...p,[beat.char]:{...(p[beat.char]||{}),...(beat.params||{})}}));
       if(beat.char&&beat.char_state!==undefined)setCharStates(s=>({...s,[beat.char]:beat.char_state}));
       if(beat.sfx_text)setSFX(beat.sfx_text);
@@ -903,7 +904,7 @@ function App(){
           <div>
             <svg width="540" height="320" viewBox="0 0 540 320" style={{display:"block",width:"100%"}}>
               {bgComp&&React.createElement(bgComp)}
-              {Object.entries(compiledChars).map(([id,Comp])=>Comp?<Comp key={id} mode={charModes[id]||"idle"} state={charStates[id]||null} params={charParams[id]||{}}/>:null)}
+              {phase!=="idle"&&Object.entries(compiledChars).map(([id,Comp])=>Comp&&charVisible[id]?<Comp key={id} mode={charModes[id]||"idle"} state={charStates[id]||null} params={charParams[id]||{}}/>:null)}
               {gas&&<GasCloud/>}
               {bubble&&(()=>{const p=bposRef.current[bubble.who]||skitCharsRef.current[bubble.who]?.bpos||{cx:270,cy:160,tailDir:"down-left"};return <Bubble cx={p.cx} cy={p.cy} text={bubble.text} type={bubble.type} tailDir={p.tailDir}/>;})()}
               {sfx&&<SFXText text={sfx}/>}
@@ -980,6 +981,7 @@ function Viewer(){
   const [charModes,setCharModes]=useState(()=>{const m={};Object.entries(CHARS).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";});return m;});
   const [charStates,setCharStates]=useState(()=>{const s={};Object.entries(CHARS).forEach(([id,ch])=>{s[id]=ch.initial_state||null;});return s;});
   const [charParams,setCharParams]=useState({});
+  const [charVis,setCharVis]=useState({});
   const [bub,setBub]=useState(null);const [gas,setGas]=useState(false);
   const [sfx,setSFX]=useState(null);const [play,setPlay]=useState(false);const [ph,setPh]=useState("idle");
   const cr=useRef(false),au=useRef({});
@@ -987,7 +989,7 @@ function Viewer(){
   function reset(){
     cr.current=true;if(window.speechSynthesis)window.speechSynthesis.cancel();
     const m={},s={};Object.entries(CHARS).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});
-    setCharModes(m);setCharStates(s);setBub(null);setGas(false);setSFX(null);setPlay(false);setPh("idle");
+    setCharModes(m);setCharStates(s);setBub(null);setGas(false);setSFX(null);setPlay(false);setPh("idle");setCharVis({});
   }
   async function playSkit(){
     if(play)return;cr.current=false;setPlay(true);setPh("playing");
@@ -996,7 +998,7 @@ function Viewer(){
       if(!ok())break;
       if(beat.pre_delay){await wt(beat.pre_delay);if(!ok())break;}
       for(const eff of (beat.effects_before||[])){if(!ok())break;if(eff==="gas_on")setGas(true);else if(eff.startsWith("sfx:"))setSFX(eff.slice(4));else if(eff==="sound:fart")fa();else if(eff==="sound:bark")bk();else if(eff==="sound:thump")th();}
-      if(beat.char&&beat.mode)setCharModes(m=>({...m,[beat.char]:beat.mode}));
+      if(beat.char&&beat.mode){setCharModes(m=>({...m,[beat.char]:beat.mode}));setCharVis(v=>({...v,[beat.char]:true}));}
       if(beat.char&&beat.params!==undefined)setCharParams(p=>({...p,[beat.char]:{...(p[beat.char]||{}),...(beat.params||{})}}));
       if(beat.char&&beat.char_state!==undefined)setCharStates(s=>({...s,[beat.char]:beat.char_state}));
       if(beat.sfx_text)setSFX(beat.sfx_text);
@@ -1023,7 +1025,7 @@ function Viewer(){
     <div style={{border:"3px solid #FFE900",borderRadius:12,boxShadow:"6px 6px 0 #000",overflow:"hidden"}}>
       <svg width="540" height="320" viewBox="0 0 540 320" style={{display:"block",maxWidth:"100%"}}>
         {_bgComp&&React.createElement(_bgComp)}
-        {Object.entries(CHARS).map(([id,ch])=>{const Comp=charComps[id];if(!Comp)return null;return <Comp key={id} mode={charModes[id]} state={charStates[id]} params={charParams[id]||{}}\/>;} )}
+        {ph!=="idle"&&Object.entries(CHARS).map(([id,ch])=>{const Comp=charComps[id];if(!Comp||!charVis[id])return null;return <Comp key={id} mode={charModes[id]} state={charStates[id]} params={charParams[id]||{}}\/>;} )}
         {gas&&<GasCloud\/>}
         {bub&&(()=>{const p=BPOS[bub.who]||CHARS[bub.who]?.bpos||{cx:270,cy:160,tailDir:"down-left"};return <Bubble cx={p.cx} cy={p.cy} text={bub.text} type={bub.type} tailDir={p.tailDir}\/>;})()}
         {sfx&&<SFXText text={sfx}\/>}
@@ -1035,7 +1037,7 @@ function Viewer(){
         <button onClick={reset} style={{padding:"11px 20px",fontSize:16,...S,fontWeight:"bold",background:"#1A2838",color:"white",border:"3px solid #FFE900",borderRadius:10,cursor:"pointer",boxShadow:"4px 4px 0 #000"}}>&#8635; Reset<\/button>
       <\/div>
     <\/div>
-    <div style={{marginTop:8,fontSize:10,color:"#334"}}>Made with FYEOX SkitStudio v0.5.0 &bull; fyeox.com<\/div>
+    <div style={{marginTop:8,fontSize:10,color:"#334"}}>Made with FYEOX SkitStudio v0.5.1 &bull; fyeox.com<\/div>
   <\/div>);
 }
 const r=ReactDOM.createRoot(document.getElementById('r'));r.render(<Viewer\/>);

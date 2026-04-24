@@ -243,8 +243,8 @@ check('backUp keyframe in style.css or inline',
   studioSrc.includes('@keyframes backUp')||html.includes('style.css'));
 check('backUp uses CSS custom property var --bk-x',
   html.includes('var(--bk-x,'));
-check('STUDIO_VERSION is 0.5.0',
-  html.includes('STUDIO_VERSION="0.5.0"'));
+check('STUDIO_VERSION is 0.5.1',
+  html.includes('STUDIO_VERSION="0.5.1"'));
 check('params field in serializeSkit',
   html.includes('params:l.params'));
 check('charParams useState declared',
