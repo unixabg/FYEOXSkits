@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  FYEOXSkits — CharacterStudio v0.5.0
+  FYEOXSkits — CharacterStudio v0.5.1
   Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg/FYEOXSkits
   GNU Affero General Public License v3 or later.
   Requires: style.css in the same folder.
@@ -37,7 +37,7 @@ textarea.field-input{resize:vertical;line-height:1.5;}
 <div id="root"></div>
 <script type="text/babel">
 const {useState,useRef,useEffect,useMemo}=React;
-const CS_VERSION="0.5.0";
+const CS_VERSION="0.5.1";
 const LS_CHAR_LIB="fyeox_char_lib_v3";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ function patchAnimValue(svg_component,key,val){
 }
 
 // ── Preview component ────────────────────────────────────────────────────
-function Preview({char,activeMode,posXOverride=0}){
+function Preview({char,activeMode,posXOverride=0,posYOverride=0}){
   const [Comp,setComp]=useState(null);
   const [err,setErr]=useState(null);
 
@@ -159,7 +159,7 @@ function Preview({char,activeMode,posXOverride=0}){
             </g>
           )}
           {/* Character */}
-          {Comp&&<Comp mode={activeMode} state={char.initial_state||null} params={{pos_x:posXOverride}}/>}
+          {Comp&&<Comp mode={activeMode} state={char.initial_state||null} params={{pos_x:posXOverride,pos_y:posYOverride}}/>}
           {!Comp&&!err&&(
             <text x="270" y="160" textAnchor="middle" fontSize="13" fill="#445" fontFamily="'Comic Sans MS',cursive">No SVG component loaded</text>
           )}
@@ -351,7 +351,7 @@ function ModesTab({char,onChange,activeMode,setActiveMode}){
       </div>
       <div className="divider"/>
       <div>
-        <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>📍 Default stage position (pos_x)</div>
+        <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>📍 Default stage position (pos_x / pos_y)</div>
         <div className="anim-row">
           <span className="anim-label">pos_x default</span>
           <input type="range" min="-300" max="300" value={char._pos_x_default||0}
@@ -361,8 +361,17 @@ function ModesTab({char,onChange,activeMode,setActiveMode}){
             onChange={e=>onChange({...char,_pos_x_default:Number(e.target.value)})}/>
           <span className="anim-unit">px</span>
         </div>
+        <div className="anim-row">
+          <span className="anim-label">pos_y default</span>
+          <input type="range" min="-300" max="300" value={char._pos_y_default||0}
+            onChange={e=>onChange({...char,_pos_y_default:Number(e.target.value)})}
+            style={{width:140,accentColor:"#8ABACC"}}/>
+          <input className="anim-val" type="number" value={char._pos_y_default||0}
+            onChange={e=>onChange({...char,_pos_y_default:Number(e.target.value)})}/>
+          <span className="anim-unit">px</span>
+        </div>
         <div style={{fontSize:9,color:"#445",marginTop:4,fontStyle:"italic"}}>
-          0 = drawn position. Override per-beat in skit with params: {"{"}pos_x: N{"}"}. Preview updates live.
+          0 = drawn position. Negative pos_y moves up. Override per-beat in skit with params: {"{"}pos_x: N, pos_y: N{"}"}. Preview updates live.
         </div>
       </div>
       {/* Animation values */}
@@ -578,7 +587,7 @@ function App(){
             <div style={{fontSize:10,color:"#8ABACC",marginBottom:6}}>
               Preview — mode: <span style={{color:"#FFE900",fontWeight:"bold"}}>{activeMode}</span>
             </div>
-            <Preview char={char} activeMode={activeMode} posXOverride={char._pos_x_default||0}/>
+            <Preview char={char} activeMode={activeMode} posXOverride={char._pos_x_default||0} posYOverride={char._pos_y_default||0}/>
             {/* Quick mode switcher */}
             <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:8}}>
               {(char.modes||[]).map(m=>(
