@@ -22,48 +22,63 @@ jobs:
           python3 - <<'EOF'
           import json, os, re
 
-          char_files = sorted(f for f in os.listdir('.') if f.endswith('.char'))
+          # Find all .char files recursively, skip hidden dirs
+          char_files = []
+          for root, dirs, files in os.walk('./chars'):
+              dirs[:] = [d for d in dirs if not d.startswith('.')]
+              for f in files:
+                  if f.endswith('.char'):
+                      char_files.append(os.path.join(root, f))
+          char_files.sort()
+
+          print(f"Found {len(char_files)} .char file(s):")
+          for f in char_files:
+              print(f"  {f}")
 
           rows = []
-          for fname in char_files:
+          for fpath in char_files:
               try:
-                  with open(fname) as f:
+                  with open(fpath) as f:
                       d = json.load(f)
                   if d.get('_type') != 'fyeox_character':
+                      print(f"  SKIP {fpath} -- not a fyeox_character")
                       continue
                   emoji   = d.get('emoji', '🎭')
                   name    = d.get('name', d['id'])
-                  cid     = d.get('id', fname.replace('.char',''))
+                  cid     = d.get('id', os.path.basename(fpath).replace('.char',''))
                   species = d.get('species', '')
                   modes   = ' '.join(f'`{m}`' for m in d.get('modes', []))
                   rows.append(f'| {emoji} {name} | `{cid}` | {species} | {modes} |')
+                  print(f"  OK  {fpath} -- {name}")
               except Exception as e:
-                  print(f'Skipping {fname}: {e}')
+                  print(f"  ERR {fpath} -- {e}")
 
-          table = (
-              '<!-- CHAR_TABLE_START -->\n'
-              '| Character | ID | Species | Modes |\n'
-              '|---|---|---|---|\n'
-              + '\n'.join(rows) + '\n'
-              '<!-- CHAR_TABLE_END -->'
-          )
+          if not rows:
+              print("No valid characters found -- README not updated.")
+          else:
+              table = (
+                  '<!-- CHAR_TABLE_START -->\n'
+                  '| Character | ID | Species | Modes |\n'
+                  '|---|---|---|---|\n'
+                  + '\n'.join(rows) + '\n'
+                  '<!-- CHAR_TABLE_END -->'
+              )
 
-          with open('README.md', 'r') as f:
-              readme = f.read()
+              with open('README.md', 'r') as f:
+                  readme = f.read()
 
-          updated = re.sub(
-              r'<!-- CHAR_TABLE_START -->.*?<!-- CHAR_TABLE_END -->',
-              table,
-              readme,
-              flags=re.DOTALL
-          )
-
-          with open('README.md', 'w') as f:
-              f.write(updated)
-
-          print(f"Updated README.md with {len(rows)} character(s):")
-          for r in rows:
-              print(" ", r)
+              if '<!-- CHAR_TABLE_START -->' not in readme:
+                  print("ERROR -- README.md is missing <!-- CHAR_TABLE_START --> marker.")
+              else:
+                  updated = re.sub(
+                      r'<!-- CHAR_TABLE_START -->.*?<!-- CHAR_TABLE_END -->',
+                      table,
+                      readme,
+                      flags=re.DOTALL
+                  )
+                  with open('README.md', 'w') as f:
+                      f.write(updated)
+                  print(f"Updated README.md with {len(rows)} character(s).")
           EOF
 
       - name: Commit updated README
