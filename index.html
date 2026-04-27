@@ -58,12 +58,10 @@ const CHAR_FILES=[
   "opie.char",
   "police_car.char",
 ];
-const BG_FILES=[
-  "park.bg",
-  "porch.bg",
-  "sidewalk.bg",
-  "street.bg",
-];
+/* One default background is installed automatically.
+   Additional backgrounds are available as paid add-ons — contact fyeox.com */
+const DEFAULT_BG_FILE="default.bg";
+const LS_BG_DEFAULT="fyeox_bg_default_v1";
 
 /* ── Avatar renderer ─────────────────────────────────────────────────────── */
 const _avCache={};
@@ -197,9 +195,8 @@ function Step({n,text}){
 
 /* ── Main app ────────────────────────────────────────────────────────────── */
 function StarterPack(){
-  /* fetched char/bg data (for display + install) */
+  /* fetched char data (for display + install) */
   const [chars,setChars]=useState([]);
-  const [bgs,setBgs]=useState([]);
   /* what is already saved in localStorage */
   const [lib,setLib]=useState(()=>{
     try{return JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");}
@@ -219,13 +216,11 @@ function StarterPack(){
       ...CHAR_FILES.map(f=>
         fetch(CHARS_BASE+f).then(r=>{if(!r.ok)throw new Error(f+" — HTTP "+r.status);return r.json();})
       ),
-      ...BG_FILES.map(f=>
-        fetch(BG_BASE+f).then(r=>{if(!r.ok)throw new Error(f+" — HTTP "+r.status);return r.json();})
-      ),
+      fetch(BG_BASE+DEFAULT_BG_FILE).then(r=>{if(!r.ok)throw new Error(DEFAULT_BG_FILE+" — HTTP "+r.status);return r.json();}),
     ])
     .then(results=>{
       setChars(results.slice(0,CHAR_FILES.length));
-      setBgs(results.slice(CHAR_FILES.length));
+      // default bg stored for install; not displayed as a download option
       setFetchState("ready");
     })
     .catch(e=>{
@@ -268,7 +263,18 @@ function StarterPack(){
       localStorage.setItem(LS_CHAR_LIB,JSON.stringify(newLib));
       refreshLib();
     }catch(e){
-      errs.push("Browser storage write failed: "+e.message);
+      errs.push("Could not write characters to browser storage: "+e.message);
+    }
+
+    // Install default background
+    try{
+      const bgRes=await fetch(BG_BASE+DEFAULT_BG_FILE);
+      if(!bgRes.ok)throw new Error("HTTP "+bgRes.status);
+      const bgData=await bgRes.json();
+      if(bgData._type!=="fyeox_background")throw new Error("unexpected type");
+      localStorage.setItem(LS_BG_DEFAULT,JSON.stringify(bgData));
+    }catch(e){
+      errs.push("Default background: "+e.message);
     }
 
     setErrors(errs);
@@ -283,6 +289,7 @@ function StarterPack(){
     ))return;
     try{
       localStorage.removeItem(LS_CHAR_LIB);
+      localStorage.removeItem(LS_BG_DEFAULT);
       refreshLib();
       setInstallState("idle");
     }catch(e){}
@@ -510,31 +517,25 @@ function StarterPack(){
           </div>
         </div>
 
-        {/* ── Backgrounds section ──────────────────────────────────────── */}
-        {bgs.length>0&&(
+        {/* ── Default background note ──────────────────────────────────── */}
+        {isReady&&(
           <div style={{
             background:"#0A0E1A",border:"2px solid #1A3050",
-            borderRadius:12,padding:"16px 20px",
+            borderRadius:12,padding:"14px 20px",
+            display:"flex",alignItems:"center",gap:12,
           }}>
-            <div style={{
-              color:"#8ABACC",fontWeight:"bold",fontSize:13,marginBottom:8,
-            }}>🖼️ Background Pack</div>
-            <div style={{
-              fontSize:11,color:"#445",marginBottom:12,lineHeight:1.6,
-            }}>
-              Backgrounds load per-skit using the <strong style={{color:"#8ABACC"}}>🖼 BG</strong> button
-              in the Watch tab. Download these files now and keep them in your Downloads folder.
-            </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {bgs.map((bg,i)=>(
-                <a key={i} href={BG_BASE+BG_FILES[i]} download style={{
-                  padding:"9px 18px",fontSize:12,fontWeight:"bold",
-                  background:"#0A1828",color:"#8ABACC",
-                  border:"2px solid #2A4A6A",borderRadius:8,
-                  boxShadow:"2px 2px 0 #000",textDecoration:"none",
-                  display:"inline-block",...S,
-                }}>⬇ {bg.name||bg.id}</a>
-              ))}
+            <span style={{fontSize:28}}>🌃</span>
+            <div>
+              <div style={{color:"#8ABACC",fontWeight:"bold",fontSize:12,marginBottom:3}}>
+                Default Background Included
+              </div>
+              <div style={{fontSize:11,color:"#445",lineHeight:1.6}}>
+                A <strong style={{color:"#6A8AB0"}}>sunny outdoor scene</strong> background
+                installs automatically with the character pack — no file picking needed.
+                Additional backgrounds are available as add-ons
+                at <a href="https://fyeox.com" target="_blank" rel="noreferrer"
+                  style={{color:"#FFE900",textDecoration:"none"}}>fyeox.com</a>.
+              </div>
             </div>
           </div>
         )}

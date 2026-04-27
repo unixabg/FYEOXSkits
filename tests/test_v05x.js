@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────
-// FYEOX Skit Maker v0.5.0 — Test Suite
-// Inherits all 140 v0.4.0 checks + new guards for v0.5.0 Beat Builder.
-// Run: node test_v050.js [path/to/SkitStudio.html]
+// FYEOX Skit Maker v0.5.3 — Test Suite
+// Inherits all v0.5.2 checks + default background guards.
+// Run: node test_v05x.js [path/to/SkitStudio.html]
 // ─────────────────────────────────────────────────────────────────────────────
 'use strict';
 const fs   = require('fs');
@@ -243,8 +243,8 @@ check('backUp keyframe in style.css or inline',
   studioSrc.includes('@keyframes backUp')||html.includes('style.css'));
 check('backUp uses CSS custom property var --bk-x',
   html.includes('var(--bk-x,'));
-check('STUDIO_VERSION is 0.5.2',
-  html.includes('STUDIO_VERSION="0.5.2"'));
+check('STUDIO_VERSION is 0.5.3',
+  html.includes('STUDIO_VERSION="0.5.3"'));
 check('params field in serializeSkit',
   html.includes('params:l.params'));
 check('charParams useState declared',
@@ -407,8 +407,28 @@ check('applyLoadedSkit preserved — existing .skit loading intact',
 check('parseSkit backwards-compat — still validates fyeox_skit type',
   html.includes('fyeox_skit') && html.includes('parseSkit'));
 
+// ── 28. v0.5.3 — default background from Starter Pack ────────────────────────
+check('LS_BG_DEFAULT constant declared',
+  /const LS_BG_DEFAULT\s*=/.test(html));
+check('applyDefaultBG function declared',
+  html.includes('function applyDefaultBG('));
+check('applyDefaultBG reads LS_BG_DEFAULT from localStorage',
+  html.includes('localStorage.getItem(LS_BG_DEFAULT)'));
+check('applyDefaultBG called in confirmNewSkit',
+  (()=>{
+    const start=html.indexOf('function confirmNewSkit(');
+    const end=html.indexOf('\n  }',start)+4;
+    return html.slice(start,end).includes('applyDefaultBG()');
+  })());
+check('applyDefaultBG called in applyLoadedSkit bg-missing branch',
+  (()=>{
+    const start=html.indexOf('function applyLoadedSkit(');
+    const end=html.indexOf('\n  }',start)+4;
+    return html.slice(start,end).includes('applyDefaultBG()');
+  })());
+
 // ── Summary ───────────────────────────────────────────────────────────────────
-console.log('\nFYEOX Skit Maker v0.5.0 \u2014 Test Suite');
+console.log('\nFYEOX Skit Maker v0.5.3 \u2014 Test Suite');
 console.log('\u2550'.repeat(54));
 results.forEach(r => console.log(r));
 console.log('\u2550'.repeat(54));

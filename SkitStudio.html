@@ -18,9 +18,10 @@
 <div id="root"></div>
 <script type="text/babel">
 const {useState,useRef,useEffect}=React;
-const STUDIO_VERSION="0.5.2";
+const STUDIO_VERSION="0.5.3";
 const LS_LAST_SKIT="fyeox_last_skit_v3";
 const LS_CHAR_LIB="fyeox_char_lib_v3";
+const LS_BG_DEFAULT="fyeox_bg_default_v1";
 
 
 const CAST=[];
@@ -643,7 +644,7 @@ function App(){
     Object.keys(_merged).forEach(id=>{if(_lib[id])_merged[id]=_lib[id];});
     setSkitChars(_merged);compileAndInitChars(_merged);
     if(d.bg_src){try{const code=Babel.transform("("+d.bg_src+")",{presets:["react"]}).code;setBgComp(()=>eval(code));bgSrcRef.current=d.bg_src;}catch(e){console.warn("bg restore fail",e);}}
-    else{setBgComp(null);bgSrcRef.current="";}
+    else{setBgComp(null);bgSrcRef.current="";applyDefaultBG();}
   }
   function openFilePicker(cb){
     const inp=document.createElement("input");inp.type="file";inp.accept=".skit,.json";
@@ -662,13 +663,25 @@ function App(){
     inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d._type!=="fyeox_background")throw new Error("Not a .bg file");const code=Babel.transform("("+d.svg_component+")",{presets:["react"]}).code;const Comp=eval(code);setBgComp(()=>Comp);bgSrcRef.current=d.svg_component;showToast("\uD83D\uDDBC\uFE0F "+(d.name||d.id)+" loaded!","#8ABACC");}catch(err){alert("Could not load background.\n"+err.message);}};reader.readAsText(file);};
     inp.click();
   }
+  // Loads the default background from localStorage (installed by the Starter Pack).
+  // Silent no-op if nothing is stored — the studio still works without it.
+  function applyDefaultBG(){
+    try{
+      const d=JSON.parse(localStorage.getItem(LS_BG_DEFAULT)||"null");
+      if(!d?.svg_component)return;
+      const code=Babel.transform("("+d.svg_component+")",{presets:["react"]}).code;
+      const Comp=eval(code);
+      setBgComp(()=>Comp);
+      bgSrcRef.current=d.svg_component;
+    }catch(e){console.warn("FYEOX: default bg load failed",e);}
+  }
   function confirmNewSkit(){
     setShowNewModal(false);
     Object.values(recordings).forEach(u=>URL.revokeObjectURL(u));
     setSkitChars({});compileAndInitChars({});
     setSkitTitle("New Skit");setSkitEpisode(1);
     setLines([]);linesRef.current=[];origLines.current=[];audioB64.current={};setRecordings({});
-    setBgComp(null);bgSrcRef.current="";
+    setBgComp(null);bgSrcRef.current="";applyDefaultBG();
     resetScene();showToast("✨ New skit started","#8ABACC");
   }
   function saveSkit(){
