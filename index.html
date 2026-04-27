@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<!--
+  FYEOX Skit Studio — Starter Pack  (starter.html)
+  Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg
+  GNU Affero General Public License v3 or later.
+
+  Drop this file next to SkitStudio.html, style.css, and your .char / .bg files.
+  Students open it once, click Install, then Open Skit Studio — done.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FYEOX Skit Studio — Starter Pack</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#0d1520;
+    font-family:'Comic Sans MS',cursive;
+    color:#C8CAD8;
+    min-height:100vh;
+  }
+  @keyframes bubbleFade{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+  @keyframes slideIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+  @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+  @keyframes checkPop{0%{transform:scale(0)}70%{transform:scale(1.3)}100%{transform:scale(1)}}
+  .card-enter{animation:slideIn .3s ease-out both;}
+  .spin{animation:pulse 1.2s ease-in-out infinite;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+
+/* ── Config ─────────────────────────────────────────────────────────────────
+   Repo layout:
+     chars/      — .char character files
+     backgrounds/ — .bg background files
+   These paths are relative to starter.html, which lives in the repo root.
+   Update them here if the folder structure ever changes.
+   ───────────────────────────────────────────────────────────────────────── */
+const CHARS_BASE="./chars/";
+const BG_BASE="./backgrounds/";
+const STUDIO_VERSION="0.5.2";
+const LS_CHAR_LIB="fyeox_char_lib_v3";
+
+/* Manifest — add entries here as new characters or backgrounds are created */
+const CHAR_FILES=[
+  "bobby.char",
+  "cougar_71.char",
+  "fenderbender.char",
+  "montie.char",
+  "opie.char",
+  "police_car.char",
+];
+const BG_FILES=[
+  "park.bg",
+  "porch.bg",
+  "sidewalk.bg",
+  "street.bg",
+];
+
+/* ── Avatar renderer ─────────────────────────────────────────────────────── */
+const _avCache={};
+function CharAvatar({ch}){
+  const [Comp,setComp]=useState(null);
+  useEffect(()=>{
+    if(!ch?.svg_avatar)return;
+    if(!_avCache[ch.id]){
+      try{
+        const code=Babel.transform("("+ch.svg_avatar+")",{presets:["react"]}).code;
+        _avCache[ch.id]=eval(code);
+      }catch(e){}
+    }
+    setComp(()=>_avCache[ch.id]||null);
+  },[ch?.id]);
+  if(Comp)return <Comp/>;
+  return <span style={{fontSize:36}}>{ch?.emoji||"🎭"}</span>;
+}
+
+/* ── Skeleton card shown while loading ───────────────────────────────────── */
+function SkeletonCard(){
+  return(
+    <div style={{
+      background:"#0A0E1A",border:"2px solid #1A2030",borderRadius:12,
+      padding:"14px 14px 12px",display:"flex",flexDirection:"column",
+      alignItems:"center",gap:10,height:220,
+    }}>
+      <div style={{width:44,height:44,borderRadius:"50%",background:"#1A2838",
+        backgroundImage:"linear-gradient(90deg,#1A2838 25%,#243040 50%,#1A2838 75%)",
+        backgroundSize:"200% 100%",animation:"shimmer 1.4s infinite"}}/>
+      <div style={{width:"70%",height:12,borderRadius:6,background:"#1A2838",
+        backgroundImage:"linear-gradient(90deg,#1A2838 25%,#243040 50%,#1A2838 75%)",
+        backgroundSize:"200% 100%",animation:"shimmer 1.4s infinite"}}/>
+      <div style={{width:"50%",height:9,borderRadius:6,background:"#1A2838",
+        backgroundImage:"linear-gradient(90deg,#1A2838 25%,#243040 50%,#1A2838 75%)",
+        backgroundSize:"200% 100%",animation:"shimmer 1.4s infinite"}}/>
+      <div style={{width:"90%",height:36,borderRadius:6,background:"#1A2838",
+        backgroundImage:"linear-gradient(90deg,#1A2838 25%,#243040 50%,#1A2838 75%)",
+        backgroundSize:"200% 100%",animation:"shimmer 1.4s infinite"}}/>
+    </div>
+  );
+}
+
+/* ── Character card ──────────────────────────────────────────────────────── */
+function CharCard({ch,installed}){
+  const traits=Array.isArray(ch.traits)?ch.traits:[];
+  const color=ch.color||"#FFE900";
+  return(
+    <div className="card-enter" style={{
+      background:"#0A0E1A",
+      border:"2px solid "+(installed?("#2ECC71"):(color+"44")),
+      borderRadius:12,padding:"14px 14px 12px",
+      display:"flex",flexDirection:"column",alignItems:"center",gap:8,
+      position:"relative",transition:"border-color .25s, box-shadow .25s",
+      boxShadow:installed?"0 0 12px rgba(46,204,113,0.18)":"none",
+    }}>
+      {/* Installed badge */}
+      {installed&&(
+        <div style={{
+          position:"absolute",top:8,right:10,
+          color:"#2ECC71",fontWeight:"bold",fontSize:14,
+          animation:"checkPop .3s ease-out",
+        }}>✓</div>
+      )}
+      {/* Avatar */}
+      <div style={{width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <CharAvatar ch={ch}/>
+      </div>
+      {/* Name / role */}
+      <div style={{textAlign:"center"}}>
+        <div style={{color,fontWeight:"bold",fontSize:14}}>{ch.emoji} {ch.name}</div>
+        <div style={{color:"#8ABACC",fontSize:10,marginTop:2}}>{ch.role}</div>
+        <div style={{color:"#445",fontSize:9}}>{ch.species}</div>
+      </div>
+      {/* Appearance blurb */}
+      <div style={{
+        fontSize:10,color:"#6A8AB0",textAlign:"center",
+        fontStyle:"italic",lineHeight:1.45,
+      }}>
+        {ch.appearance?.length>90?ch.appearance.slice(0,90)+"…":ch.appearance}
+      </div>
+      {/* Trait pills */}
+      <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"center"}}>
+        {traits.slice(0,4).map(t=>(
+          <span key={t} style={{
+            fontSize:9,borderRadius:4,padding:"1px 6px",
+            background:"#1A2838",color:"#6A8AB0",
+            border:"1px solid #2A3A50",
+          }}>{t}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+function ProgressBar({value,max,label}){
+  const pct=max>0?Math.min(100,Math.round((value/max)*100)):0;
+  return(
+    <div style={{width:"100%"}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontSize:11}}>
+        <span style={{color:"#8ABACC"}}>{label}</span>
+        <span style={{color:"#FFE900",fontWeight:"bold"}}>{pct}%</span>
+      </div>
+      <div style={{height:10,background:"#080C16",borderRadius:6,
+        border:"1px solid #2A2D44",overflow:"hidden"}}>
+        <div style={{
+          height:"100%",width:pct+"%",borderRadius:6,
+          background:"linear-gradient(90deg,#2ECC71,#FFE900)",
+          transition:"width .35s ease",
+        }}/>
+      </div>
+    </div>
+  );
+}
+
+/* ── How-it-works step ───────────────────────────────────────────────────── */
+function Step({n,text}){
+  return(
+    <div style={{display:"flex",gap:10,alignItems:"flex-start",fontSize:12}}>
+      <span style={{
+        background:"#1A2838",color:"#FFE900",fontWeight:"bold",
+        borderRadius:"50%",width:22,height:22,flexShrink:0,
+        display:"flex",alignItems:"center",justifyContent:"center",
+        fontSize:11,marginTop:1,border:"1.5px solid #FFE90044",
+      }}>{n}</span>
+      <span style={{color:"#8ABACC",lineHeight:1.5}}>{text}</span>
+    </div>
+  );
+}
+
+/* ── Main app ────────────────────────────────────────────────────────────── */
+function StarterPack(){
+  /* fetched char/bg data (for display + install) */
+  const [chars,setChars]=useState([]);
+  const [bgs,setBgs]=useState([]);
+  /* what is already saved in localStorage */
+  const [lib,setLib]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");}
+    catch(e){return {};}
+  });
+  /* states: idle | fetching | ready | fetchError */
+  const [fetchState,setFetchState]=useState("idle");
+  /* states: idle | installing | done | error */
+  const [installState,setInstallState]=useState("idle");
+  const [progress,setProgress]=useState({done:0,total:0,current:""});
+  const [errors,setErrors]=useState([]);
+
+  /* ── Fetch all files on mount for display ──────────────────────────────── */
+  useEffect(()=>{
+    setFetchState("fetching");
+    Promise.all([
+      ...CHAR_FILES.map(f=>
+        fetch(CHARS_BASE+f).then(r=>{if(!r.ok)throw new Error(f+" — HTTP "+r.status);return r.json();})
+      ),
+      ...BG_FILES.map(f=>
+        fetch(BG_BASE+f).then(r=>{if(!r.ok)throw new Error(f+" — HTTP "+r.status);return r.json();})
+      ),
+    ])
+    .then(results=>{
+      setChars(results.slice(0,CHAR_FILES.length));
+      setBgs(results.slice(CHAR_FILES.length));
+      setFetchState("ready");
+    })
+    .catch(e=>{
+      console.error("FYEOX Starter Pack fetch error:",e);
+      setFetchState("fetchError");
+    });
+  },[]);
+
+  /* ── Helpers ─────────────────────────────────────────────────────────────── */
+  function refreshLib(){
+    try{setLib(JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}"));}
+    catch(e){}
+  }
+
+  /* ── Install all into localStorage ─────────────────────────────────────── */
+  async function installAll(){
+    if(installState==="installing")return;
+    setInstallState("installing");
+    setErrors([]);
+    const total=chars.length;
+    setProgress({done:0,total,current:""});
+    const newLib={...lib};
+    const errs=[];
+
+    for(let i=0;i<chars.length;i++){
+      const ch=chars[i];
+      setProgress({done:i,total,current:ch.name||ch.id});
+      /* tiny yield so React can repaint the progress bar */
+      await new Promise(r=>setTimeout(r,80));
+      if(ch._type!=="fyeox_character"){
+        errs.push((ch.name||ch.id)+": unexpected file type");
+        continue;
+      }
+      newLib[ch.id]=ch;
+    }
+
+    setProgress({done:total,total,current:""});
+
+    try{
+      localStorage.setItem(LS_CHAR_LIB,JSON.stringify(newLib));
+      refreshLib();
+    }catch(e){
+      errs.push("Browser storage write failed: "+e.message);
+    }
+
+    setErrors(errs);
+    setInstallState(errs.length===0?"done":"error");
+  }
+
+  /* ── Clear all installed characters ─────────────────────────────────────── */
+  function clearAll(){
+    if(!window.confirm(
+      "Remove all installed FYEOX characters from this browser?\n\n"+
+      "You can re-install them at any time by coming back to this page."
+    ))return;
+    try{
+      localStorage.removeItem(LS_CHAR_LIB);
+      refreshLib();
+      setInstallState("idle");
+    }catch(e){}
+  }
+
+  /* ── Derived state ───────────────────────────────────────────────────────── */
+  const installedCount=chars.filter(ch=>!!lib[ch.id]).length;
+  const allInstalled=chars.length>0&&installedCount===chars.length;
+  const isReady=fetchState==="ready";
+  const isInstalling=installState==="installing";
+  const S={fontFamily:"'Comic Sans MS',cursive"};
+
+  /* ── Render ──────────────────────────────────────────────────────────────── */
+  return(
+    <div style={{
+      minHeight:"100vh",
+      background:"radial-gradient(ellipse at top,#1a2838 0%,#0d1520 60%)",
+      padding:"28px 16px 48px",...S,
+    }}>
+      <div style={{maxWidth:700,margin:"0 auto",display:"flex",flexDirection:"column",gap:24}}>
+
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div style={{textAlign:"center",animation:"bubbleFade .4s ease-out"}}>
+          <div style={{
+            fontSize:34,fontWeight:"bold",color:"#FFE900",
+            textShadow:"4px 4px 0 #8B0000",letterSpacing:2,lineHeight:1.1,
+          }}>🎭 FYEOX Skit Studio</div>
+          <div style={{
+            fontSize:20,color:"#2ECC71",fontWeight:"bold",
+            marginTop:6,letterSpacing:1,
+          }}>✨ Starter Pack</div>
+          <div style={{
+            fontSize:12,color:"#8ABACC",fontStyle:"italic",
+            marginTop:8,maxWidth:480,margin:"10px auto 0",lineHeight:1.6,
+          }}>
+            Load all characters into your browser in one click — then open Skit Studio and start creating.
+          </div>
+        </div>
+
+        {/* ── Teacher instructions ─────────────────────────────────────── */}
+        <div style={{
+          background:"#0A0E1A",border:"2px solid #1A3A50",
+          borderRadius:12,padding:"16px 20px",
+        }}>
+          <div style={{
+            color:"#FFE900",fontWeight:"bold",fontSize:13,marginBottom:12,
+            display:"flex",alignItems:"center",gap:7,
+          }}>
+            <span>👩‍🏫</span> For Teachers — How This Works
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <Step n="1" text="Share this page's URL with students via Google Classroom (or just project it)."/>
+            <Step n="2" text='Students visit the link and click "Install All Characters" — takes about 2 seconds..'/>
+            <Step n="3" text='Click "Open Skit Studio" — all characters are immediately available. No login, no account.'/>
+            <Step n="4" text="Finished skits download as .skit files. Students attach them to a Google Classroom assignment to turn in."/>
+          </div>
+          <div style={{
+            marginTop:14,padding:"9px 13px",
+            background:"#060A12",borderRadius:8,
+            border:"1px solid #1A3050",
+            fontSize:11,color:"#6A9ABB",lineHeight:1.6,
+          }}>
+            💡 <strong style={{color:"#8ABACC"}}>How browser storage works:</strong> Characters are stored
+            in this browser on this device. Each student installs once per Chromebook — they stay there
+            until browser data is cleared. No student data ever leaves the device. No accounts, no tracking, no COPPA concerns.
+          </div>
+        </div>
+
+        {/* ── Install panel ────────────────────────────────────────────── */}
+        <div style={{
+          background:"#080F08",
+          border:"3px solid "+(allInstalled?"#2ECC71":"#FFE900"),
+          borderRadius:14,padding:"20px 22px 18px",
+          boxShadow:"6px 6px 0 #000",
+          transition:"border-color .3s",
+        }}>
+          {/* Panel header */}
+          <div style={{
+            display:"flex",alignItems:"center",
+            justifyContent:"space-between",
+            marginBottom:16,flexWrap:"wrap",gap:8,
+          }}>
+            <div>
+              <div style={{
+                color:allInstalled?"#2ECC71":"#FFE900",
+                fontWeight:"bold",fontSize:17,
+              }}>
+                {allInstalled?"✓ All Characters Installed!":"🎭 Character Pack"}
+              </div>
+              <div style={{color:"#7ABF7A",fontSize:11,marginTop:3}}>
+                {fetchState==="fetching"&&<span className="spin">Loading character data…</span>}
+                {fetchState==="ready"&&(
+                  installedCount===0
+                    ?"Not yet installed in this browser"
+                    :installedCount+" of "+chars.length+" characters installed in this browser"
+                )}
+                {fetchState==="fetchError"&&
+                  <span style={{color:"#FF8866"}}>⚠ Could not load pack — see note below</span>}
+              </div>
+            </div>
+            {installedCount>0&&(
+              <button onClick={clearAll} style={{
+                padding:"5px 13px",fontSize:11,cursor:"pointer",...S,
+                background:"#1A0A0A",color:"#FF8888",
+                border:"1px solid #441111",borderRadius:7,
+              }}>🗑 Clear All</button>
+            )}
+          </div>
+
+          {/* Progress bar — only while installing */}
+          {isInstalling&&(
+            <div style={{marginBottom:16}}>
+              <ProgressBar
+                value={progress.done}
+                max={progress.total}
+                label={progress.current?"Installing "+progress.current+"…":"Installing…"}
+              />
+            </div>
+          )}
+
+          {/* Done progress bar */}
+          {installState==="done"&&(
+            <div style={{marginBottom:16}}>
+              <ProgressBar value={1} max={1} label="All characters installed ✓"/>
+            </div>
+          )}
+
+          {/* Errors */}
+          {errors.length>0&&(
+            <div style={{
+              background:"#2A0A0A",border:"1px solid #661111",borderRadius:8,
+              padding:"9px 13px",marginBottom:14,fontSize:11,color:"#FF8888",
+              lineHeight:1.6,
+            }}>
+              {errors.map((e,i)=><div key={i}>⚠ {e}</div>)}
+            </div>
+          )}
+
+          {/* CTA buttons */}
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+            {!allInstalled&&(
+              <button
+                onClick={installAll}
+                disabled={!isReady||isInstalling}
+                style={{
+                  padding:"13px 30px",fontSize:16,fontWeight:"bold",
+                  cursor:(!isReady||isInstalling)?"not-allowed":"pointer",...S,
+                  background:isInstalling?"#1A2A1A":"#2ECC71",
+                  color:isInstalling?"#2ECC71":"#0A1A0A",
+                  border:"3px solid #2ECC71",borderRadius:12,
+                  boxShadow:"4px 4px 0 #000",
+                  opacity:(!isReady||isInstalling)?0.6:1,
+                  transition:"all .15s",
+                }}>
+                {isInstalling?"⏳ Installing…":"⬇ Install All Characters"}
+              </button>
+            )}
+            {(installState==="done"||allInstalled)&&(
+              <a href="./SkitStudio.html" style={{
+                padding:"13px 30px",fontSize:16,fontWeight:"bold",
+                background:"#C0392B",color:"white",
+                border:"3px solid #FFE900",borderRadius:12,
+                boxShadow:"4px 4px 0 #000",textDecoration:"none",
+                display:"inline-block",...S,
+                animation:"bubbleFade .3s ease-out",
+              }}>▶ Open Skit Studio →</a>
+            )}
+            {!allInstalled&&installedCount===0&&isReady&&(
+              <span style={{fontSize:11,color:"#445",fontStyle:"italic"}}>
+                {chars.length} characters ready to install
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Character grid ────────────────────────────────────────────── */}
+        <div>
+          <div style={{
+            color:"#FFE900",fontWeight:"bold",fontSize:14,
+            marginBottom:14,display:"flex",alignItems:"center",gap:8,
+          }}>
+            🎬 Meet the Cast
+            {isReady&&(
+              <span style={{fontSize:11,color:"#556",fontWeight:"normal"}}>
+                — {chars.length} characters
+              </span>
+            )}
+          </div>
+          <div style={{
+            display:"grid",
+            gridTemplateColumns:"repeat(auto-fill,minmax(185px,1fr))",
+            gap:12,
+          }}>
+            {fetchState==="fetching"&&
+              CHAR_FILES.map(f=><SkeletonCard key={f}/>)}
+            {fetchState==="ready"&&
+              chars.map(ch=><CharCard key={ch.id} ch={ch} installed={!!lib[ch.id]}/>)}
+            {fetchState==="fetchError"&&(
+              <div style={{
+                gridColumn:"1/-1",
+                background:"#1A0A00",border:"2px solid #FF8800",
+                borderRadius:10,padding:"16px 20px",
+                fontSize:12,color:"#FFAA66",lineHeight:1.6,
+              }}>
+                <div style={{fontWeight:"bold",marginBottom:8}}>
+                  ⚠️ Cannot load character files
+                </div>
+                <div>
+                  This page must be opened from a web server — not from a local file path.
+                  Characters are fetched from <code style={{background:"#0A0A0A",padding:"1px 5px",borderRadius:3}}>chars/</code> and
+                  backgrounds from <code style={{background:"#0A0A0A",padding:"1px 5px",borderRadius:3}}>backgrounds/</code>.
+                  If you're testing locally before pushing to GitHub, run:
+                </div>
+                <div style={{
+                  background:"#0A0A0A",borderRadius:6,padding:"7px 12px",
+                  marginTop:10,fontFamily:"monospace",fontSize:11,color:"#7AFFCC",
+                }}>
+                  npx serve .
+                </div>
+                <div style={{marginTop:8,color:"#886644"}}>
+                  On GitHub Pages this resolves automatically.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Backgrounds section ──────────────────────────────────────── */}
+        {bgs.length>0&&(
+          <div style={{
+            background:"#0A0E1A",border:"2px solid #1A3050",
+            borderRadius:12,padding:"16px 20px",
+          }}>
+            <div style={{
+              color:"#8ABACC",fontWeight:"bold",fontSize:13,marginBottom:8,
+            }}>🖼️ Background Pack</div>
+            <div style={{
+              fontSize:11,color:"#445",marginBottom:12,lineHeight:1.6,
+            }}>
+              Backgrounds load per-skit using the <strong style={{color:"#8ABACC"}}>🖼 BG</strong> button
+              in the Watch tab. Download these files now and keep them in your Downloads folder.
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {bgs.map((bg,i)=>(
+                <a key={i} href={BG_BASE+BG_FILES[i]} download style={{
+                  padding:"9px 18px",fontSize:12,fontWeight:"bold",
+                  background:"#0A1828",color:"#8ABACC",
+                  border:"2px solid #2A4A6A",borderRadius:8,
+                  boxShadow:"2px 2px 0 #000",textDecoration:"none",
+                  display:"inline-block",...S,
+                }}>⬇ {bg.name||bg.id}</a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Microphone tip ───────────────────────────────────────────── */}
+        <div style={{
+          background:"#0A0E1A",border:"2px solid #1A3050",
+          borderRadius:12,padding:"16px 20px",
+        }}>
+          <div style={{
+            color:"#CC88FF",fontWeight:"bold",fontSize:13,marginBottom:8,
+          }}>🎙️ Microphone on School Chromebooks</div>
+          <div style={{fontSize:11,color:"#7A8A9A",lineHeight:1.7}}>
+            Recording voices in Skit Studio requires microphone access.
+            On managed Chromebooks your IT admin controls this.
+            To enable it for your school, ask them to add this site's URL to the
+            microphone allow-list in the <strong style={{color:"#8ABACC"}}>Google Admin Console</strong> under:
+          </div>
+          <div style={{
+            background:"#060A14",borderRadius:7,padding:"8px 14px",
+            marginTop:10,fontFamily:"monospace",fontSize:11,color:"#8ABACC",lineHeight:1.8,
+          }}>
+            Devices → Chrome → Settings → Content → Microphone
+          </div>
+          <div style={{marginTop:10,fontSize:11,color:"#445",lineHeight:1.6}}>
+            Without this step, students can still write and watch skits —
+            lines just use the browser's robot voice instead of their own.
+          </div>
+        </div>
+
+        {/* ── Footer ───────────────────────────────────────────────────── */}
+        <div style={{textAlign:"center",fontSize:11,marginTop:8}}>
+          <span style={{color:"#FFE900",fontWeight:"bold"}}>v{STUDIO_VERSION}</span>
+          <a href="https://github.com/unixabg/FYEOXSkits/" target="_blank" rel="noreferrer"
+            style={{color:"#FFE900",textDecoration:"none",marginLeft:3}}
+            title="Project page on GitHub">↗</a>
+          <span style={{color:"#8ABACC"}}>
+            &nbsp;•&nbsp; FYEOX Skit Studio &nbsp;•&nbsp; fyeox.com &nbsp;•&nbsp; AGPL-3.0
+          </span>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById("root"));
+root.render(<StarterPack/>);
+</script>
+</body>
+</html>
