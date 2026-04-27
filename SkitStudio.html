@@ -1040,7 +1040,7 @@ function Viewer(){
         <button onClick={reset} style={{padding:"11px 20px",fontSize:16,...S,fontWeight:"bold",background:"#1A2838",color:"white",border:"3px solid #FFE900",borderRadius:10,cursor:"pointer",boxShadow:"4px 4px 0 #000"}}>&#8635; Reset<\/button>
       <\/div>
     <\/div>
-    <div style={{marginTop:8,fontSize:10,color:"#334"}}>Made with FYEOX SkitStudio v0.5.2 &bull; fyeox.com<\/div>
+    <div style={{marginTop:8,fontSize:11,textAlign:"center"}}><span style={{color:"#FFE900",fontWeight:"bold"}}>v${STUDIO_VERSION}<\/span><a href="https://github.com/unixabg/FYEOXSkits/" target="_blank" rel="noreferrer" style={{color:"#FFE900",textDecoration:"none",marginLeft:3}} title="Project page on GitHub">↗<\/a><span style={{color:"#8ABACC"}}> &nbsp;&bull;&nbsp; FYEOX Skit Studio &nbsp;&bull;&nbsp; fyeox.com &nbsp;&bull;&nbsp; AGPL-3.0<\/span><\/div>
   <\/div>);
 }
 const r=ReactDOM.createRoot(document.getElementById('r'));r.render(<Viewer\/>);
