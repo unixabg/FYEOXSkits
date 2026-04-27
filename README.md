@@ -2,140 +2,160 @@
 
 **Helping bring your ideas to skit.**
 
-A single-file animated skit creator for the open web. No install, no server, no account — just open in a browser and create.
+A single-file animated skit creation tool inspired by HyperCard. No server. No install. No account. Open `SkitStudio.html` in any modern browser and start creating.
 
-Inspired by HyperCard. Built with AI. Made for humans.
-
----
-
-## What It Is
-
-FYEOXSkits is a set of browser-based tools for building animated skits with hand-crafted SVG characters, your own recorded voice, and a self-contained viewer you can share with anyone as a single HTML file.
-
-The idea is simple: you have something worth saying. A lesson, a story, a moment, an idea. FYEOXSkits gives you a cast of characters, a stage, and a studio — and gets out of the way.
-
-This project was built in collaboration with AI, not as a shortcut, but as a creative partnership. The hope is that the same spirit carries through to the people who use it — that anyone with something worth expressing can express it, regardless of their technical background.
-
----
-
-## The Tools
-
-### `SkitStudio.html`
-The main authoring environment. Build a skit beat by beat, record your voice, add characters, set timing, and export a standalone viewer.
-
-- Load or build skits entirely in the browser
-- Import characters from your library
-- Record dialogue or let text-to-speech handle it
-- Export a self-contained viewer HTML anyone can open
-
-### `CharacterStudio.html`
-A visual editor for `.char` files. Tune character metadata, bubble positions, animation distances, and stage position without touching JSON.
-
-- Live preview as you edit
-- Arrive/leave direction and distance controls
-- `pos_x` stage positioning — control exactly where a character lands
-- Save to file or directly to your character library
-
-### `style.css`
-Shared stylesheet. Keep it in the same folder as both HTML files.
-
----
-
-## The Sample Characters
-
-| Character | Species | Modes |
-|---|---|---|
-| Bobby | Fox Squirrel | visible, arrive, leave, bounce |
-| Opie | Virginia Opossum | idle, hiss, playing_dead, arrive, leave |
-| Montie | Dog | idle, bark, growl, sniff, arrive, leave, happy |
-| FenderBender | Retired hot-rodder | idle, talking, cane |
-| Cougar 71 | 1971 Muscle Car | idle, driving, honk, burnout, arrive, driveoff, backup |
-| Police Car | Officer Crown | idle, driving, lights, chase, burnout, arrive, driveoff, backup |
-
-All characters are hand-coded SVG with JSX animation. Each `.char` file is self-contained JSON — download one and drag it into the studio.
+- 🌐 Website: [fyeox.com](https://fyeox.com)
+- 📄 License: [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html)
+- ✉️ Contact: unixabg@gmail.com
 
 ---
 
 ## Quick Start
 
-1. Download `SkitStudio.html`, `CharacterStudio.html`, and `style.css` — keep them in the same folder
-2. Open `SkitStudio.html` in any modern browser
-3. Go to the **Characters** tab and import a `.char` file
-4. Switch to the **Studio** tab and click **+ Add Beat**
-5. Pick your character, set a mode, set a duration
-6. Switch to **Watch** and hit Play
-7. When you're happy, hit **Export Viewer** — share that HTML file with anyone
-
-No account. No login. No internet required after the first load.
-
----
-
-## The File Formats
-
-### `.skit` — Skit definition
-A JSON file describing a complete skit: title, characters, beats, and base64-encoded audio recordings. Load it into SkitStudio to edit, or share it with collaborators.
-
-### `.char` — Character definition  
-A JSON file containing everything about a character: SVG component code, avatar, modes, animation keyframes, personality metadata, and bubble position. Import into the studio or share in the community.
-
-### `.bg` — Background definition
-A JSX SVG component that sets the scene behind your characters.
-
-### Viewer HTML — The output
-A completely self-contained HTML file with all characters, audio, and playback logic baked in. Send it to anyone. Open it anywhere. No dependencies.
-
----
-
-## Architecture
-
-Single HTML files — React 18 + Babel standalone via CDN. No build step, no bundler, no framework lock-in. The whole studio loads from one file you can inspect, fork, and modify.
-
-Characters are JSX arrow functions compiled at runtime by Babel. Skits are data-driven — the same playback loop handles any combination of characters and beats.
-
-```
-SkitStudio.html       — skit authoring, recording, export
-CharacterStudio.html  — character editing and preview
-style.css             — shared design tokens and animations
-*.char                — character definitions (JSON)
-*.skit                — skit definitions (JSON)
-*.bg                  — background definitions (JSON)
-viewer_*.html         — exported standalone viewers
+```bash
+git clone https://github.com/unixabg/FYEOXSkits.git
+cd FYEOXSkits
 ```
 
----
-
-## A Note on AI and Creativity
-
-This project was built in an ongoing conversation with Claude (Anthropic). Not just for code generation — for thinking through the design, the architecture, the philosophy of what a tool like this should be and do.
-
-The belief behind FYEOXSkits is that there's too much information in the world and not enough expression. A teacher with something worth teaching. A parent with a story worth telling. A kid with an idea worth sharing. Most tools that could help them are either too simple (no real authorship) or too complex (requires a whole stack).
-
-HyperCard solved this for a window of time in the late 1980s and early 1990s. It made authors out of people who didn't think of themselves as authors. FYEOXSkits is an attempt to do the same thing for the open web.
-
-If you make something with it — a lesson, a story, a joke, a memory — that's the point.
+Then open `SkitStudio.html` in any modern browser — all characters are included and ready to load from the Characters tab. No install, no dependencies, no account.
 
 ---
 
-## Contributing
+## Files
 
-Pull requests welcome. A few ways to contribute:
+| File | Purpose |
+|---|---|
+| `SkitStudio.html` | Main skit authoring tool |
+| `CharacterStudio.html` | Character editor |
+| `style.css` | Shared stylesheet — must be in the same folder as the HTML files |
+| `test_v050.js` | Test suite: `node test_v050.js SkitStudio.html` |
+| `*.char` | Character definition files |
+| `*.skit` | Saved skit files |
 
-- **New `.char` files** — build a character, submit it, grow the cast
-- **Bug reports** — open an issue with the skit or character file that triggered it
-- **Feature ideas** — open an issue, describe what you're trying to make that you can't
+---
 
-The test suite lives in `test_v050.js`:
+## Characters
+
+Characters are portable `.char` files — hand-coded SVG with JSX, loadable into any skit. Each character has a set of **modes** that drive its animation and behavior during playback.
+
+<!-- CHAR_TABLE_START -->
+| Character | ID | Species | Modes |
+|---|---|---|---|
+| 🐿️ Bobby | `bobby` | Fox Squirrel | `visible` `arrive` `leave` `bounce` |
+| 🚗 The Cougar | `cougar_71` | 1971 Mercury Cougar Convertible | `idle` `driving` `honk` `burnout` `arrive` `driveoff` `backup` |
+| 👴 FenderBender | `fenderbender` | Human (Elderly) | `idle` `talking` `cane` `arrive` `leave` |
+| 🐶 Montie | `montie` | Tricolor Beagle | `idle` `bark` `growl` `sniff` `arrive` `leave` `happy` |
+| 🐾 Opie | `opie` | Virginia Opossum | `idle` `hiss` `playing_dead` `arrive` `leave` |
+| 🚔 Officer Crown | `police_car` | Police Crown Victoria | `idle` `driving` `lights` `chase` `burnout` `arrive` `driveoff` `backup` `backup_lights` |
+<!-- CHAR_TABLE_END -->
+
+> This table is auto-updated by GitHub Actions whenever a `.char` file is pushed to the repository.
+
+### Mode Reference
+
+| Mode | Description |
+|---|---|
+| `idle` | Default standing/resting state, no animation |
+| `visible` | Character is on stage, static |
+| `arrive` | Slides onto the stage (typically from off-screen) |
+| `leave` | Slides off the stage |
+| `talking` | Mouth-open or speaking pose |
+| `bounce` | Excited bounce animation |
+| `bark` | Bark animation with shake |
+| `growl` | Low growl with shake |
+| `sniff` | Sniffing pose |
+| `happy` | Tail-wag or happy animation |
+| `hiss` | Defensive hiss animation |
+| `playing_dead` | Plays dead (opossum special) |
+| `cane` | Shaking cane animation |
+| `driving` | Vehicle in motion |
+| `honk` | Vehicle horn animation |
+| `burnout` | Spinning tires/smoke effect |
+| `driveoff` | Vehicle drives off stage |
+| `backup` | Vehicle reverses |
+| `chase` | High-speed pursuit animation |
+| `lights` | Emergency lights flashing |
+| `backup_lights` | Reversing with lights active |
+
+---
+
+## Skit Format
+
+Skits are saved as `.skit` JSON files and can be loaded back into SkitStudio. The format embeds all character definitions, beat data, audio recordings (base64), and an optional background component.
+
+```json
+{
+  "_type": "fyeox_skit",
+  "_version": "0.5.2",
+  "title": "My Skit",
+  "episode": 1,
+  "characters": { "bobby": { "...full char def..." } },
+  "lines": [
+    { "id": "bobby_arrive_0", "char": "bobby", "mode": "arrive", "duration": 1500, "params": { "pos_x": -80 }, "recordable": false },
+    { "id": "bobby_visible_1", "char": "bobby", "mode": "visible", "text": "Hi!", "bubble": "speech", "recordable": true }
+  ],
+  "audio": { "bobby_visible_1": "base64..." },
+  "bg_src": ""
+}
+```
+
+---
+
+## Character Format
+
+Characters are `.char` JSON files containing metadata, mode lists, and hand-coded SVG/JSX components.
+
+```json
+{
+  "_type": "fyeox_character",
+  "_version": "0.5.2",
+  "id": "bobby",
+  "name": "Bobby",
+  "emoji": "🐿️",
+  "species": "Fox Squirrel",
+  "color": "#B05E28",
+  "modes": ["visible", "arrive", "leave", "bounce"],
+  "initial_mode": "visible",
+  "initial_state": null,
+  "bpos": { "cx": 355, "cy": 160, "tailDir": "down-right" },
+  "svg_component": "({mode,state,params={}})=>{ ... }",
+  "svg_avatar": "()=><svg .../>",
+  "author": "unixabg@gmail.com"
+}
+```
+
+### SVG Authoring Rules
+
+- All characters use a **two-layer `<g>` structure**: outer `<g>` handles `pos_x` stage position, inner `<g>` handles mode animation
+- No `xmlns="..."` in `svg_avatar` — invalid in JSX
+- No apostrophes in JSX comments
+- Keyframes must use `from/to` format (not `0%/100%`) for CharacterStudio slider compatibility
+- `initial_state: null` (not `"hidden"`) for characters that should be visible on load
+
+---
+
+## Consulting & Custom Development
+
+Have an idea for a feature, a custom character, or a branded skit experience?
+
+- **Custom characters** — commission a hand-coded SVG character for your project, mascot, or curriculum
+- **Feature requests** — open a [GitHub Issue](https://github.com/unixabg/FYEOXSkits/issues) to discuss; features beyond routine scope require a **bounty fee** agreed before work begins
+- **Consulting** — integration help, custom skit formats, or embedded deployments available by arrangement
+
+📬 Reach out: **unixabg@gmail.com** | [fyeox.com](https://fyeox.com)
+
+---
+
+## Running the Test Suite
+
 ```bash
 node test_v050.js SkitStudio.html
-# 184 checks — all should pass
+# Expected: 184/184 passing
 ```
 
 ---
 
 ## License
 
-GNU Affero General Public License v3.0 — see [LICENSE](LICENSE)
-
-Copyright (C) 2026 unixabg@gmail.com | [fyeox.com](https://fyeox.com) | [github.com/unixabg](https://github.com/unixabg)
-
-You are free to use, modify, and distribute this software. If you run a modified version as a network service, you must share your changes under the same license.
+GNU Affero General Public License v3.0 or later — see [LICENSE](LICENSE).  
+Copyright (C) 2025 unixabg@gmail.com

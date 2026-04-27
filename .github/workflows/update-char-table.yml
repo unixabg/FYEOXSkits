@@ -1,0 +1,77 @@
+name: Update Character Table in README
+
+on:
+  push:
+    paths:
+      - '**.char'
+      - '.github/workflows/update-char-table.yml'
+  workflow_dispatch:
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate character table
+        run: |
+          python3 - <<'EOF'
+          import json, os, re
+
+          char_files = sorted(f for f in os.listdir('.') if f.endswith('.char'))
+
+          rows = []
+          for fname in char_files:
+              try:
+                  with open(fname) as f:
+                      d = json.load(f)
+                  if d.get('_type') != 'fyeox_character':
+                      continue
+                  emoji   = d.get('emoji', '🎭')
+                  name    = d.get('name', d['id'])
+                  cid     = d.get('id', fname.replace('.char',''))
+                  species = d.get('species', '')
+                  modes   = ' '.join(f'`{m}`' for m in d.get('modes', []))
+                  rows.append(f'| {emoji} {name} | `{cid}` | {species} | {modes} |')
+              except Exception as e:
+                  print(f'Skipping {fname}: {e}')
+
+          table = (
+              '<!-- CHAR_TABLE_START -->\n'
+              '| Character | ID | Species | Modes |\n'
+              '|---|---|---|---|\n'
+              + '\n'.join(rows) + '\n'
+              '<!-- CHAR_TABLE_END -->'
+          )
+
+          with open('README.md', 'r') as f:
+              readme = f.read()
+
+          updated = re.sub(
+              r'<!-- CHAR_TABLE_START -->.*?<!-- CHAR_TABLE_END -->',
+              table,
+              readme,
+              flags=re.DOTALL
+          )
+
+          with open('README.md', 'w') as f:
+              f.write(updated)
+
+          print(f"Updated README.md with {len(rows)} character(s):")
+          for r in rows:
+              print(" ", r)
+          EOF
+
+      - name: Commit updated README
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet README.md || (
+            git add README.md &&
+            git commit -m "chore: auto-update character table [skip ci]" &&
+            git push
+          )
