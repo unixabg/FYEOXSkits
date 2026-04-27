@@ -43,7 +43,12 @@ Characters are portable `.char` files — hand-coded SVG with JSX, loadable into
 <!-- CHAR_TABLE_START -->
 | Character | ID | Species | Modes |
 |---|---|---|---|
-
+| 🐿️ Bobby | `bobby` | Fox Squirrel | `visible` `arrive` `leave` `bounce` |
+| 🚗 The Cougar | `cougar_71` | 1971 Mercury Cougar Convertible | `idle` `driving` `honk` `burnout` `arrive` `driveoff` `backup` |
+| 🧓 FenderBender | `fenderbender` | Human (Elderly) | `idle` `talking` `cane` `arrive` `leave` |
+| 🐾 Montie | `montie` | Tricolor Beagle | `idle` `bark` `growl` `sniff` `arrive` `leave` `happy` |
+| 🐀 Opie | `opie` | Virginia Opossum | `idle` `hiss` `playing_dead` `arrive` `leave` |
+| 🚔 Officer Crown | `police_car` | Police Crown Victoria | `idle` `driving` `lights` `chase` `burnout` `arrive` `driveoff` `backup` `backup_lights` |
 <!-- CHAR_TABLE_END -->
 
 > This table is auto-updated by GitHub Actions whenever a `.char` file is pushed to the repository.
