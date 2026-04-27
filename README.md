@@ -19,6 +19,8 @@ cd FYEOXSkits
 
 Then open `SkitStudio.html` in any modern browser — all characters are included and ready to load from the Characters tab. No install, no dependencies, no account.
 
+> 💡 See [HINTS.md](HINTS.md) for tips on stage positioning, z-order, character authoring, and more.
+
 ---
 
 ## Files
