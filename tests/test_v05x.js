@@ -297,6 +297,24 @@ check('changeBeatChar checks propLib as fallback',
   })());
 check('changeBeatChar uses default_mode fallback for props',
   html.includes('ch.initial_mode||ch.default_mode||"idle"'));
+
+// ── 30. v0.5.4 — audio plays without bubble text ──────────────────────────
+check('studio playback checks recording before bubble+text gate',
+  (()=>{
+    const start=html.indexOf('async function playSkit(');
+    const end=html.indexOf('\n  }',start)+4;
+    const fn=html.slice(start,end);
+    // recording check must come BEFORE the else-if tts/duration fallback
+    const recIdx=fn.indexOf('recordings[beat.id]');
+    const ttsIdx=fn.indexOf('speakFallback');
+    return recIdx>0 && ttsIdx>0 && recIdx<ttsIdx;
+  })());
+check('viewer playback checks recording before bubble+text gate',
+  (()=>{
+    const start=html.lastIndexOf('if(au.current[beat.id])');
+    const ttsIdx=html.indexOf('await sf(',start);
+    return start>0 && ttsIdx>start && ttsIdx-start<200;
+  })());
 check('params field in serializeSkit',
   html.includes('params:l.params'));
 check('charParams useState declared',

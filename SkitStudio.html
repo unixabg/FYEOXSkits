@@ -790,8 +790,11 @@ function App(){
       if(beat.bubble&&beat.text){
         const bp=bposRef.current[beat.char]||skitCharsRef.current[beat.char]?.bpos||{cx:270,cy:160,tailDir:"down-left"};
         if(ok())setBubble({who:beat.char,text:beat.text,type:beat.bubble,cx:bp.cx,cy:bp.cy,tailDir:bp.tailDir});
-        if(recordings[beat.id])await playAudio(recordings[beat.id]);
-        else if(beat.tts)await speakFallback(beat.text,beat.tts);
+      }
+      if(recordings[beat.id]){
+        await playAudio(recordings[beat.id]);
+      }else if(beat.bubble&&beat.text){
+        if(beat.tts)await speakFallback(beat.text,beat.tts);
         else if(beat.duration)await wait(beat.duration);
       }else if(beat.duration){await wait(beat.duration);}
       if(!ok())break;
@@ -1111,8 +1114,11 @@ function Viewer(){
       if(beat.bubble&&beat.text){
         const bp=BPOS[beat.char]||{cx:270,cy:160,tailDir:"down-left"};
         if(ok())setBub({who:beat.char,text:beat.text,type:beat.bubble,cx:bp.cx,cy:bp.cy,tailDir:bp.tailDir});
-        if(au.current[beat.id])await pa(au.current[beat.id]);
-        else if(beat.tts)await sf(beat.text,beat.tts);
+      }
+      if(au.current[beat.id]){
+        await pa(au.current[beat.id]);
+      }else if(beat.bubble&&beat.text){
+        if(beat.tts)await sf(beat.text,beat.tts);
         else if(beat.duration)await wt(beat.duration);
       }else if(beat.duration){await wt(beat.duration);}
       if(!ok())break;
