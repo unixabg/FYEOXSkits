@@ -1,0 +1,30 @@
+{
+  "_type": "fyeox_prop",
+  "_version": "0.5.4",
+  "id": "weather_cloud",
+  "name": "Weather Cloud",
+  "emoji": "🌥️",
+  "description": "A sky cloud with light, dark, and rainy variants. Use arrive/idle/leave to move it on and off stage.",
+  "author": "unixabg@gmail.com",
+  "created": "2026-04-29",
+  "z_layer": "background",
+  "modes": [
+    "arrive",
+    "arrive-dark",
+    "arrive-rain",
+    "idle",
+    "idle-dark",
+    "idle-rain",
+    "leave",
+    "leave-dark",
+    "leave-rain"
+  ],
+  "default_mode": "idle",
+  "bpos": {
+    "cx": 270,
+    "cy": 60,
+    "tailDir": "down-left"
+  },
+  "svg_component": "({mode=\"idle\",state,params={}})=>{\nconst posX=params.pos_x||0;const posY=params.pos_y||0;\nconst isD=mode===\"arrive-dark\"||mode===\"idle-dark\"||mode===\"leave-dark\";\nconst isR=mode===\"arrive-rain\"||mode===\"idle-rain\"||mode===\"leave-rain\";\nconst isDark=isD||isR;\nconst act=mode.replace(\"-dark\",\"\").replace(\"-rain\",\"\");\nconst body=isDark?\"#5A5A72\":\"#F2F2F2\";\nconst strk=isDark?\"#2A2A3A\":\"#C8C8C8\";\nconst shad=isDark?\"#3A3A4A\":\"#DCDCDC\";\nconst hi=isDark?\"#6A6A7A\":\"#FFFFFF\";\nlet anim=\"cloudFloat 4s ease-in-out infinite\";\nif(act===\"arrive\")anim=\"cloudArrive 1.6s cubic-bezier(0.08,0.82,0.35,1) forwards\";\nif(act===\"leave\")anim=\"cloudLeave 1.4s ease-in forwards\";\nconst drops=[{x:44,d:0},{x:62,d:0.3},{x:80,d:0.15},{x:98,d:0.45},{x:116,d:0.1}];\nreturn(\n<g transform={\"translate(\"+posX+\",\"+posY+\")\"}>\n  <style>{\"@keyframes cloudArrive{from{transform:translateX(-340px)}to{transform:translateX(0)}}@keyframes cloudLeave{from{transform:translateX(0)}to{transform:translateX(640px)}}@keyframes cloudFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes rainFall{0%{transform:translateY(-2px);opacity:0}15%{opacity:1}100%{transform:translateY(30px);opacity:0}}\"}</style>\n  <g style={{animation:anim}}>\n    <g transform=\"translate(190,28)\">\n      <ellipse cx=\"80\" cy=\"58\" rx=\"75\" ry=\"16\" fill={shad} opacity=\"0.35\"/>\n      <ellipse cx=\"80\" cy=\"48\" rx=\"70\" ry=\"28\" fill={body} stroke={strk} strokeWidth=\"1.5\"/>\n      <ellipse cx=\"48\" cy=\"53\" rx=\"38\" ry=\"22\" fill={body} stroke={strk} strokeWidth=\"1.5\"/>\n      <ellipse cx=\"114\" cy=\"53\" rx=\"36\" ry=\"21\" fill={body} stroke={strk} strokeWidth=\"1.5\"/>\n      <ellipse cx=\"64\" cy=\"37\" rx=\"30\" ry=\"25\" fill={body} stroke={strk} strokeWidth=\"1.5\"/>\n      <ellipse cx=\"98\" cy=\"35\" rx=\"34\" ry=\"27\" fill={body} stroke={strk} strokeWidth=\"1.5\"/>\n      <ellipse cx=\"80\" cy=\"27\" rx=\"26\" ry=\"20\" fill={body} stroke={strk} strokeWidth=\"1.5\"/>\n      <ellipse cx=\"70\" cy=\"30\" rx=\"16\" ry=\"9\" fill={hi} opacity=\"0.32\"/>\n      {isR&&drops.map((dr,i)=>(\n        <line key={i} x1={dr.x} y1=\"68\" x2={dr.x-5} y2=\"96\" stroke=\"#6ABADD\" strokeWidth=\"2.2\" strokeLinecap=\"round\"\n          style={{animation:\"rainFall 0.85s ease-in \"+dr.d+\"s infinite\"}}/>\n      ))}\n    </g>\n  </g>\n</g>\n);\n}",
+  "svg_avatar": "()=><svg width=\"44\" height=\"44\" viewBox=\"0 0 44 44\">\n  <ellipse cx=\"22\" cy=\"30\" rx=\"18\" ry=\"9\" fill=\"#DCDCDC\" opacity=\"0.5\"/>\n  <ellipse cx=\"22\" cy=\"28\" rx=\"17\" ry=\"10\" fill=\"#EEEEEE\" stroke=\"#C8C8C8\" strokeWidth=\"1\"/>\n  <ellipse cx=\"14\" cy=\"28\" rx=\"10\" ry=\"9\" fill=\"#F2F2F2\" stroke=\"#C8C8C8\" strokeWidth=\"1\"/>\n  <ellipse cx=\"30\" cy=\"28\" rx=\"10\" ry=\"9\" fill=\"#F2F2F2\" stroke=\"#C8C8C8\" strokeWidth=\"1\"/>\n  <ellipse cx=\"18\" cy=\"22\" rx=\"9\" ry=\"10\" fill=\"#F4F4F4\" stroke=\"#C8C8C8\" strokeWidth=\"1\"/>\n  <ellipse cx=\"28\" cy=\"20\" rx=\"10\" ry=\"11\" fill=\"#F4F4F4\" stroke=\"#C8C8C8\" strokeWidth=\"1\"/>\n  <ellipse cx=\"26\" cy=\"17\" rx=\"7\" ry=\"8\" fill=\"#FFFFFF\" opacity=\"0.7\"/>\n</svg>"
+}

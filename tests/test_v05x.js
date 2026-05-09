@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────
-// FYEOX Skit Maker v0.5.3 — Test Suite
-// Inherits all v0.5.2 checks + default background guards.
+// FYEOX Skit Maker v0.5.4 — Test Suite
+// Inherits all v0.5.3 checks + prop system guards.
 // Run: node test_v05x.js [path/to/SkitStudio.html]
 // ─────────────────────────────────────────────────────────────────────────────
 'use strict';
@@ -243,8 +243,60 @@ check('backUp keyframe in style.css or inline',
   studioSrc.includes('@keyframes backUp')||html.includes('style.css'));
 check('backUp uses CSS custom property var --bk-x',
   html.includes('var(--bk-x,'));
-check('STUDIO_VERSION is 0.5.3',
-  html.includes('STUDIO_VERSION="0.5.3"'));
+check('STUDIO_VERSION is 0.5.4',
+  html.includes('STUDIO_VERSION="0.5.4"'));
+
+// ── 29. v0.5.4 — prop system ──────────────────────────────────────────────
+check('LS_PROP_LIB constant declared',
+  html.includes('LS_PROP_LIB="fyeox_prop_lib_v1"'));
+check('allCharsForBeats merges propLib',
+  html.includes('LS_PROP_LIB') && html.includes('plib'));
+check('BeatCard splits charIds and propIds by _type',
+  html.includes('fyeox_prop') && html.includes('propIds'));
+check('BeatCard uses optgroup for Characters',
+  html.includes('── Characters ──'));
+check('BeatCard uses optgroup for Props',
+  html.includes('── Props ──'));
+check('BeatCard isProp detection',
+  html.includes('isProp'));
+check('BeatCard Dialogue disabled when isProp',
+  html.includes('"💬 Dialogue",isProp)'));
+check('BeatCard shows prop badge',
+  html.includes('🎪 prop'));
+check('getAvatar checks propLib as fallback',
+  (()=>{
+    const start=html.indexOf('function getAvatar(');
+    const end=html.indexOf('\n}',start)+2;
+    return html.slice(start,end).includes('LS_PROP_LIB');
+  })());
+check('CharactersTab has readPropLib',
+  html.includes('readPropLib'));
+check('CharactersTab has importedProps state',
+  html.includes('importedProps'));
+check('CharactersTab has deleteProp',
+  html.includes('function deleteProp('));
+check('CharactersTab has doImportProp',
+  html.includes('function doImportProp('));
+check('doImportProp validates fyeox_prop type',
+  html.includes('"fyeox_prop"'));
+check('doImportProp writes to LS_PROP_LIB',
+  (()=>{
+    const start=html.indexOf('function doImportProp(');
+    const end=html.indexOf('\n  }',start)+4;
+    return html.slice(start,end).includes('LS_PROP_LIB');
+  })());
+check('Characters tab renders Prop Library section',
+  html.includes('🎪 Prop Library'));
+check('Characters tab renders Import .prop button',
+  html.includes('Import .prop'));
+check('changeBeatChar checks propLib as fallback',
+  (()=>{
+    const start=html.indexOf('function changeBeatChar(');
+    const end=html.indexOf('\n  }',start)+4;
+    return html.slice(start,end).includes('LS_PROP_LIB');
+  })());
+check('changeBeatChar uses default_mode fallback for props',
+  html.includes('ch.initial_mode||ch.default_mode||"idle"'));
 check('params field in serializeSkit',
   html.includes('params:l.params'));
 check('charParams useState declared',
@@ -428,7 +480,7 @@ check('applyDefaultBG called in applyLoadedSkit bg-missing branch',
   })());
 
 // ── Summary ───────────────────────────────────────────────────────────────────
-console.log('\nFYEOX Skit Maker v0.5.3 \u2014 Test Suite');
+console.log('\nFYEOX Skit Maker v0.5.4 \u2014 Test Suite');
 console.log('\u2550'.repeat(54));
 results.forEach(r => console.log(r));
 console.log('\u2550'.repeat(54));
