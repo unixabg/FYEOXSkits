@@ -51,6 +51,16 @@ function serializeSkit(title,episode,characters,lines,audioB64Map,bgSrc){
       params:l.params,recordable:l.recordable,color:l.color,emoji:l.emoji})),
     audio:audioB64Map,bg_src:bgSrc||""},null,2);
 }
+function parseSkitOrViewer(text){
+  // If it looks like HTML, extract the baked JSON from the viewer script id="bd" tag
+  if(text.trimStart().startsWith("<")){
+    const m=text.match(/<script\s[^>]*id="bd"[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/i)
+             ||text.match(/<script\s[^>]*type="application\/json"[^>]*id="bd"[^>]*>([\s\S]*?)<\/script>/i);
+    if(!m) throw new Error("No FYEOX skit data found in this HTML file.");
+    return parseSkit(m[1]);
+  }
+  return parseSkit(text);
+}
 function parseSkit(json){
   const d=JSON.parse(json);
   if(d._type!=="fyeox_skit") throw new Error("Not a valid v0.4.0 .skit file (got type: "+d._type+")");
@@ -717,8 +727,8 @@ function App(){
     else{setBgComp(null);bgSrcRef.current="";applyDefaultBG();}
   }
   function openFilePicker(cb){
-    const inp=document.createElement("input");inp.type="file";inp.accept=".skit,.json";
-    inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{applyLoadedSkit(parseSkit(ev.target.result));resetScene();showToast("📂 Loaded!","#2ECC71");if(cb)cb();}catch(err){alert("Could not load skit.\n"+err.message);}};reader.readAsText(file);};inp.click();
+    const inp=document.createElement("input");inp.type="file";inp.accept=".skit,.json,.html";
+    inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{applyLoadedSkit(parseSkitOrViewer(ev.target.result));resetScene();showToast("📂 Loaded!","#2ECC71");if(cb)cb();}catch(err){alert("Could not load skit.\n"+err.message);}};reader.readAsText(file);};inp.click();
   }
   function handleLoadFromWelcome(){openFilePicker(()=>{setTab("studio");setAppView("studio");});}
   function handleResume(){
