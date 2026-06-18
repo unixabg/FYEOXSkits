@@ -9,13 +9,14 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>FYEOX SkitStudio</title>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
 <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 <div id="root"></div>
+<script>Babel.registerPreset('react',function(){return{plugins:[[Babel.availablePlugins['transform-react-jsx'],{runtime:'classic'}]]};});</script>
 <script type="text/babel">
 const {useState,useRef,useEffect}=React;
 const STUDIO_VERSION="0.5.4";
@@ -150,14 +151,14 @@ function getAvatar(charId){
     try{
       const lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");
       const ch=lib[charId];
-      if(ch&&ch.svg_avatar){const code=Babel.transform("("+ch.svg_avatar+")",{presets:["react"]}).code;_avCache[charId]=eval(code);}
+      if(ch&&ch.svg_avatar){const code=Babel.transform("("+ch.svg_avatar+")",{presets:[["react",{runtime:"classic"}]]}).code;_avCache[charId]=eval(code);}
     }catch(e){}
   }
   if(!_avCache[charId]){
     try{
       const plib=JSON.parse(localStorage.getItem(LS_PROP_LIB)||"{}");
       const p=plib[charId];
-      if(p&&p.svg_avatar){const code=Babel.transform("("+p.svg_avatar+")",{presets:["react"]}).code;_avCache[charId]=eval(code);}
+      if(p&&p.svg_avatar){const code=Babel.transform("("+p.svg_avatar+")",{presets:[["react",{runtime:"classic"}]]}).code;_avCache[charId]=eval(code);}
     }catch(e){}
   }
   const Comp=_avCache[charId];
@@ -494,7 +495,7 @@ function CharactersTab({showToast,onLibChange}){
   function refreshLib(){setImportedChars(readLib());setImportedProps(readPropLib());}
   function deleteImported(id){try{const lib=JSON.parse(localStorage.getItem(LS_CHAR_LIB)||"{}");delete lib[id];localStorage.setItem(LS_CHAR_LIB,JSON.stringify(lib));clearAvCache();refreshLib();if(onLibChange)onLibChange();showToast("🗑 Removed","#FF6666");}catch(e){}}
   function deleteProp(id){try{const plib=JSON.parse(localStorage.getItem(LS_PROP_LIB)||"{}");delete plib[id];localStorage.setItem(LS_PROP_LIB,JSON.stringify(plib));clearAvCache();refreshLib();if(onLibChange)onLibChange();showToast("🗑 Prop removed","#FF6666");}catch(e){}}
-  function getImportedAvatar(c){if(!c.svg_avatar)return React.createElement("span",{style:{fontSize:22}},c.emoji||"🎭");try{const code=Babel.transform("("+c.svg_avatar+")",{presets:["react"]}).code;const Comp=eval(code);return React.createElement(Comp);}catch(e){return React.createElement("span",{style:{fontSize:22}},c.emoji||"🎭");}}
+  function getImportedAvatar(c){if(!c.svg_avatar)return React.createElement("span",{style:{fontSize:22}},c.emoji||"🎭");try{const code=Babel.transform("("+c.svg_avatar+")",{presets:[["react",{runtime:"classic"}]]}).code;const Comp=eval(code);return React.createElement(Comp);}catch(e){return React.createElement("span",{style:{fontSize:22}},c.emoji||"🎭");}}
   function doImportChar(){
     const inp=document.createElement("input");inp.type="file";inp.accept=".char,.json";
     inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=importChar(ev.target.result);clearAvCache();showToast("🎭 "+d.name+" imported!","#2ECC71");refreshLib();if(onLibChange)onLibChange();}catch(err){alert("Could not import .char file.\n"+err.message);}};reader.readAsText(file);};inp.click();
@@ -639,7 +640,7 @@ function App(){
   const skitCharsRef=useRef(DEFAULT_SKIT.characters||{});
   const bposRef=useRef(null);
   if(!bposRef.current){const b={...DEFAULT_BPOS};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{if(ch.bpos)b[id]=ch.bpos;});bposRef.current=b;}
-  const [compiledChars,setCompiledChars]=useState(()=>{const c={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{if(!ch.svg_component)return;try{const code=Babel.transform("("+ch.svg_component+")",{presets:["react"]}).code;c[id]=eval(code);}catch(e){}});return c;});
+  const [compiledChars,setCompiledChars]=useState(()=>{const c={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{if(!ch.svg_component)return;try{const code=Babel.transform("("+ch.svg_component+")",{presets:[["react",{runtime:"classic"}]]}).code;c[id]=eval(code);}catch(e){}});return c;});
   const [charModes,setCharModes]=useState(()=>{const m={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";});return m;});
   const [charStates,setCharStates]=useState(()=>{const s={};Object.entries(DEFAULT_SKIT.characters||{}).forEach(([id,ch])=>{s[id]=ch.initial_state||null;});return s;});
   const [charParams,setCharParams]=useState({});
@@ -676,7 +677,7 @@ function App(){
   function compileAndInitChars(chars){
     skitCharsRef.current=chars||{};
     const comp={};
-    Object.entries(chars||{}).forEach(([id,ch])=>{if(!ch.svg_component)return;try{const code=Babel.transform("("+ch.svg_component+")",{presets:["react"]}).code;comp[id]=eval(code);}catch(e){console.warn("SVG compile:",id,e);}});
+    Object.entries(chars||{}).forEach(([id,ch])=>{if(!ch.svg_component)return;try{const code=Babel.transform("("+ch.svg_component+")",{presets:[["react",{runtime:"classic"}]]}).code;comp[id]=eval(code);}catch(e){console.warn("SVG compile:",id,e);}});
     setCompiledChars(comp);
     const m={},s={};
     Object.entries(chars||{}).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});
@@ -712,7 +713,7 @@ function App(){
     const _merged={...d.characters||{}};
     Object.keys(_merged).forEach(id=>{if(_lib[id])_merged[id]=_lib[id];});
     setSkitChars(_merged);compileAndInitChars(_merged);
-    if(d.bg_src){try{const code=Babel.transform("("+d.bg_src+")",{presets:["react"]}).code;setBgComp(()=>eval(code));bgSrcRef.current=d.bg_src;}catch(e){console.warn("bg restore fail",e);}}
+    if(d.bg_src){try{const code=Babel.transform("("+d.bg_src+")",{presets:[["react",{runtime:"classic"}]]}).code;setBgComp(()=>eval(code));bgSrcRef.current=d.bg_src;}catch(e){console.warn("bg restore fail",e);}}
     else{setBgComp(null);bgSrcRef.current="";applyDefaultBG();}
   }
   function openFilePicker(cb){
@@ -729,7 +730,7 @@ function App(){
   function loadSkit(){openFilePicker(()=>setPhase("idle"));}
   function loadBG(){
     const inp=document.createElement("input");inp.type="file";inp.accept=".bg,.json";
-    inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d._type!=="fyeox_background")throw new Error("Not a .bg file");const code=Babel.transform("("+d.svg_component+")",{presets:["react"]}).code;const Comp=eval(code);setBgComp(()=>Comp);bgSrcRef.current=d.svg_component;showToast("\uD83D\uDDBC\uFE0F "+(d.name||d.id)+" loaded!","#8ABACC");}catch(err){alert("Could not load background.\n"+err.message);}};reader.readAsText(file);};
+    inp.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d._type!=="fyeox_background")throw new Error("Not a .bg file");const code=Babel.transform("("+d.svg_component+")",{presets:[["react",{runtime:"classic"}]]}).code;const Comp=eval(code);setBgComp(()=>Comp);bgSrcRef.current=d.svg_component;showToast("\uD83D\uDDBC\uFE0F "+(d.name||d.id)+" loaded!","#8ABACC");}catch(err){alert("Could not load background.\n"+err.message);}};reader.readAsText(file);};
     inp.click();
   }
   // Loads the default background from localStorage (installed by the Starter Pack).
@@ -738,7 +739,7 @@ function App(){
     try{
       const d=JSON.parse(localStorage.getItem(LS_BG_DEFAULT)||"null");
       if(!d?.svg_component)return;
-      const code=Babel.transform("("+d.svg_component+")",{presets:["react"]}).code;
+      const code=Babel.transform("("+d.svg_component+")",{presets:[["react",{runtime:"classic"}]]}).code;
       const Comp=eval(code);
       setBgComp(()=>Comp);
       bgSrcRef.current=d.svg_component;
@@ -885,7 +886,7 @@ function App(){
           skitCharsRef.current=merged;
           setSkitChars(merged);
           if(ch.svg_component){
-            try{const code=Babel.transform("("+ch.svg_component+")",{presets:["react"]}).code;
+            try{const code=Babel.transform("("+ch.svg_component+")",{presets:[["react",{runtime:"classic"}]]}).code;
               setCompiledChars(c=>({...c,[char]:eval(code)}));}catch(e){}
           }
           if(ch.bpos)bposRef.current={...bposRef.current,[char]:ch.bpos};
@@ -1037,9 +1038,9 @@ function buildViewerHTML(title,characters,lines,audioMap,bgSrc){
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>FYEOX \u2014 ${title}<\/title>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"><\/script>
 <style>*{box-sizing:border-box;margin:0;padding:0;}body{background:#0d1520;font-family:'Comic Sans MS',cursive;display:flex;align-items:center;justify-content:center;min-height:100vh;}
 @keyframes rockSway{0%,100%{transform:rotate(0deg)}50%{transform:rotate(1.8deg)}}
 @keyframes backUp{0%{transform:translateX(0)}100%{transform:translateX(var(--bk-x,80px))}}
@@ -1052,6 +1053,7 @@ function buildViewerHTML(title,characters,lines,audioMap,bgSrc){
 @keyframes bubbleFade{from{opacity:0;transform:scale(.75)}to{opacity:1;transform:scale(1)}}<\/style>
 <\/head><body><div id="r"><\/div>
 <script id="bd" type="application/json">${baked}<\/script>
+<script>Babel.registerPreset('react',function(){return{plugins:[[Babel.availablePlugins['transform-react-jsx'],{runtime:'classic'}]]};});<\/script>
 <script type="text/babel">
 const {useState,useRef,useEffect}=React;
 const D=JSON.parse(document.getElementById('bd').textContent);
@@ -1059,7 +1061,7 @@ const LN=D.lines||[],AU=D.audio||{},CHARS=D.characters||{};
 const charComps={};
 Object.entries(CHARS).forEach(([id,ch])=>{
   if(!ch.svg_component)return;
-  try{const code=Babel.transform('('+ch.svg_component+')',{presets:['react']}).code;charComps[id]=eval(code);}
+  try{const code=Babel.transform('('+ch.svg_component+')',{presets:[['react',{runtime:'classic'}]]}).code;charComps[id]=eval(code);}
   catch(e){console.warn('charComp fail:',id,e);}
 });
 const BPOS={};Object.entries(CHARS).forEach(([id,ch])=>{if(ch.bpos)BPOS[id]=ch.bpos;});
@@ -1072,7 +1074,7 @@ function pa(url){return new Promise(r=>{if(!url){r();return;}const a=new Audio(u
 function sf(text,o={}){return new Promise(r=>{if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=o.pitch??1;u.rate=o.rate??1;u.onend=r;u.onerror=()=>setTimeout(r,500);setTimeout(()=>window.speechSynthesis.speak(u),60);});}
 function b2u(b64){try{const a=b64.split(","),m=a[0].match(/:(.*?);/)[1],b=atob(a[1]),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return URL.createObjectURL(new Blob([u],{type:m}));}catch(e){return null;}}
 let _bgComp=null;
-if(D.bg_src){try{const _bc=Babel.transform("("+D.bg_src+")",{presets:["react"]}).code;_bgComp=eval(_bc);}catch(e){console.warn("bg fail",e);}}
+if(D.bg_src){try{const _bc=Babel.transform("("+D.bg_src+")",{presets:[["react",{runtime:"classic"}]]}).code;_bgComp=eval(_bc);}catch(e){console.warn("bg fail",e);}}
 function GasCloud(){return(<g style={{animation:"gasPulse 0.4s ease-in-out infinite alternate"}}><ellipse cx="385" cy="210" rx="42" ry="26" fill="rgba(100,200,60,0.52)"/><ellipse cx="358" cy="220" rx="27" ry="18" fill="rgba(100,200,60,0.46)"/><\/g>);}
 function wrapText(t,max){const out=[];for(const raw of t.split("\\n")){const words=raw.split(" ");let cur="";for(const w of words){if(!cur){cur=w;}else if((cur+" "+w).length<=max){cur+=" "+w;}else{out.push(cur);cur=w;}}out.push(cur);}return out.filter(l=>l.length>0).length?out.filter(l=>l.length>0):[""];}
 function Bubble({cx,cy,text,type,tailDir}){
