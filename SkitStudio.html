@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  FYEOXSkits — SkitStudio v0.5.2
+  FYEOXSkits — SkitStudio v0.5.4
   Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg
   GNU Affero General Public License v3 or later.
 -->
@@ -820,10 +820,12 @@ function App(){
   async function startRec(lineId){
     try{
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-      chunksRef.current=[];const mr=new MediaRecorder(stream);
+      chunksRef.current=[];
+      const mimeType=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
+      const mr=mimeType?new MediaRecorder(stream,{mimeType}):new MediaRecorder(stream);
       mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
       mr.onstop=async()=>{
-        const blob=new Blob(chunksRef.current,{type:"audio/webm"});const url=URL.createObjectURL(blob);
+        const blob=new Blob(chunksRef.current,{type:mr.mimeType||'audio/webm'});const url=URL.createObjectURL(blob);
         setRecordings(r=>({...r,[lineId]:url}));stream.getTracks().forEach(t=>t.stop());
         try{setSaveStatus("saving");const b64=await blobToB64(blob);audioB64.current[lineId]=b64;scheduleAutoSave();}catch(e){setSaveStatus("error");}
       };
@@ -1076,12 +1078,13 @@ Object.entries(CHARS).forEach(([id,ch])=>{
 });
 const BPOS={};Object.entries(CHARS).forEach(([id,ch])=>{if(ch.bpos)BPOS[id]=ch.bpos;});
 let _x=null;const ac=()=>{if(!_x)_x=new(window.AudioContext||window.webkitAudioContext)();return _x;};
+const au={current:{}},ab={current:{}},rawAu={current:{}};
 const wt=ms=>new Promise(r=>setTimeout(r,ms));
 function fa(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain(),l=c.createOscillator(),lg=c.createGain();l.frequency.value=13;lg.gain.value=30;l.connect(lg);lg.connect(o.frequency);o.type="sawtooth";o.frequency.setValueAtTime(88,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(38,c.currentTime+t+0.6);g.gain.setValueAtTime(0.45,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.7);o.connect(g);g.connect(c.destination);l.start(c.currentTime+t);o.start(c.currentTime+t);l.stop(c.currentTime+t+0.7);o.stop(c.currentTime+t+0.7);}
 function bk(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="square";o.frequency.setValueAtTime(470,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(195,c.currentTime+t+0.2);g.gain.setValueAtTime(0,c.currentTime+t);g.gain.linearRampToValueAtTime(0.28,c.currentTime+t+0.01);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.24);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.28);}
 function th(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="sine";o.frequency.setValueAtTime(145,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(26,c.currentTime+t+0.15);g.gain.setValueAtTime(0.6,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.18);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.22);}
-function pa(url){return new Promise(r=>{if(!url){r();return;}const a=new Audio(url);a.onended=r;a.onerror=r;a.play().catch(r);});}
-function sf(text,o={}){return new Promise(r=>{if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=o.pitch??1;u.rate=o.rate??1;u.onend=r;u.onerror=()=>setTimeout(r,500);setTimeout(()=>window.speechSynthesis.speak(u),60);});}
+function pa(id){return new Promise(r=>{const buf=ab.current[id];if(buf){const c=ac();const s=c.createBufferSource();s.buffer=buf;s.connect(c.destination);s.onended=r;try{s.start(0);}catch(e){r();}return;}const url=au.current[id];if(!url){r();return;}const a=new Audio(url);a.onended=r;a.onerror=r;a.play().catch(r);});}
+function sf(text,o={}){return new Promise(r=>{if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=o.pitch??1;u.rate=o.rate??1;u.onend=r;u.onerror=()=>setTimeout(r,500);window.speechSynthesis.speak(u);});}
 function b2u(b64){try{const a=b64.split(","),m=a[0].match(/:(.*?);/)[1],b=atob(a[1]),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return URL.createObjectURL(new Blob([u],{type:m}));}catch(e){return null;}}
 let _bgComp=null;
 if(D.bg_src){try{const _bc=Babel.transform("("+D.bg_src+")",{presets:[["react",{runtime:"classic"}]]}).code;_bgComp=eval(_bc);}catch(e){console.warn("bg fail",e);}}
@@ -1102,15 +1105,36 @@ function Viewer(){
   const [charZOrder,setCharZOrder]=useState([]);
   const [bub,setBub]=useState(null);const [gas,setGas]=useState(false);
   const [sfx,setSFX]=useState(null);const [play,setPlay]=useState(false);const [ph,setPh]=useState("idle");
-  const cr=useRef(false),au=useRef({});
-  useEffect(()=>{const u={};Object.entries(AU).forEach(([id,b64])=>{const x=b2u(b64);if(x)u[id]=x;});au.current=u;return()=>Object.values(u).forEach(x=>URL.revokeObjectURL(x));},[]);
+  const cr=useRef(false);
+  useEffect(()=>{
+    const u={};
+    Object.entries(AU).forEach(([id,b64])=>{
+      const x=b2u(b64);if(x)u[id]=x;
+      try{
+        const parts=b64.split(',');const bin=atob(parts[1]);
+        const bytes=new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+        rawAu.current[id]=bytes.buffer;
+      }catch(e){}
+    });
+    au.current=u;
+    return()=>Object.values(u).forEach(x=>URL.revokeObjectURL(x));
+  },[]);
   function reset(){
     cr.current=true;if(window.speechSynthesis)window.speechSynthesis.cancel();
     const m={},s={};Object.entries(CHARS).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});
     setCharModes(m);setCharStates(s);setBub(null);setGas(false);setSFX(null);setPlay(false);setPh("idle");setCharVis({});setCharZOrder([]);
   }
   async function playSkit(){
-    if(play)return;cr.current=false;setPlay(true);setPh("playing");
+    if(play)return;
+    const _ac=ac();
+    try{await _ac.resume();}catch(e){}
+    if(Object.keys(ab.current).length===0){
+      await Promise.all(Object.entries(rawAu.current).map(async([id,buf])=>{
+        try{ab.current[id]=await _ac.decodeAudioData(buf.slice(0));}catch(e){}
+      }));
+    }
+    cr.current=false;setPlay(true);setPh("playing");
     const ok=()=>!cr.current;
     for (const beat of LN){
       if(!ok())break;
@@ -1129,8 +1153,8 @@ function Viewer(){
         const bp=BPOS[beat.char]||{cx:270,cy:160,tailDir:"down-left"};
         if(ok())setBub({who:beat.char,text:beat.text,type:beat.bubble,cx:bp.cx,cy:bp.cy,tailDir:bp.tailDir});
       }
-      if(au.current[beat.id]){
-        await pa(au.current[beat.id]);
+      if(au.current[beat.id]||ab.current[beat.id]){
+        await pa(beat.id);
       }else if(beat.bubble&&beat.text){
         if(beat.tts)await sf(beat.text,beat.tts);
         else if(beat.duration)await wt(beat.duration);
