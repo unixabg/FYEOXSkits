@@ -243,8 +243,8 @@ check('backUp keyframe in style.css or inline',
   studioSrc.includes('@keyframes backUp')||html.includes('style.css'));
 check('backUp uses CSS custom property var --bk-x',
   html.includes('var(--bk-x,'));
-check('STUDIO_VERSION is 0.5.4',
-  html.includes('STUDIO_VERSION="0.5.4"'));
+check('STUDIO_VERSION is 0.5.7',
+  html.includes('STUDIO_VERSION="0.5.7"'));
 
 // ── 29. v0.5.4 — prop system ──────────────────────────────────────────────
 check('LS_PROP_LIB constant declared',
@@ -311,9 +311,9 @@ check('studio playback checks recording before bubble+text gate',
   })());
 check('viewer playback checks recording before bubble+text gate',
   (()=>{
-    const start=html.lastIndexOf('if(au.current[beat.id])');
+    const start=html.lastIndexOf('if(au.current[beat.id]||ab.current[beat.id])');
     const ttsIdx=html.indexOf('await sf(',start);
-    return start>0 && ttsIdx>start && ttsIdx-start<200;
+    return start>0 && ttsIdx>start && ttsIdx-start<300;
   })());
 check('params field in serializeSkit',
   html.includes('params:l.params'));
@@ -497,6 +497,16 @@ check('applyDefaultBG called in applyLoadedSkit bg-missing branch',
     return html.slice(start,end).includes('applyDefaultBG()');
   })());
 
+// ── v0.5.7 — iOS audio ────────────────────────────────────────────────────
+check('unlockAudio sets audioSession to playback (iOS silent switch)', html.includes('navigator.audioSession.type="playback"'));
+check('studio playSkit unlocks audio before first await', (()=>{const i=html.indexOf('async function playSkit(){');const u=html.indexOf('unlockAudio();',i);const a=html.indexOf('await',i);return i>0&&u>i&&u<a;})());
+check('viewer playSkit unlocks audio before first await', (()=>{const i=html.lastIndexOf('async function playSkit(){');const u=html.indexOf('unlockAudio();',i);const a=html.indexOf('await',i);return i>0&&u>i&&u<a;})());
+check('audio engine functions embedded in viewer', html.includes('AUDIO_ENGINE_FNS.map(f=>f.toString())'));
+check('speakFallback has a guard timeout', /const guard=setTimeout\(fin/.test(html));
+check('recording prefers AAC mp4', html.includes("'audio/mp4;codecs=mp4a.40.2'"));
+check('studio uses run counter, not cancel flag', html.includes('runRef.current===myRun')&&!html.includes('cancelRef'));
+
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log('\nFYEOX Skit Maker v0.5.4 \u2014 Test Suite');
 console.log('\u2550'.repeat(54));
@@ -510,3 +520,4 @@ console.log(`\n  ${fail === 0
   ? '\uD83C\uDF89 ALL TESTS PASS \u2014 ready to ship!'
   : '\u26A0\uFE0F  SOME TESTS FAILED \u2014 fix before handoff.'}\n`);
 process.exit(fail > 0 ? 1 : 0);
+

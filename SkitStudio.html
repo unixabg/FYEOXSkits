@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  FYEOXSkits — SkitStudio v0.5.6
+  FYEOXSkits — SkitStudio v0.5.7
   Copyright (C) 2025 unixabg@gmail.com | fyeox.com | github.com/unixabg
   GNU Affero General Public License v3 or later.
 -->
@@ -19,7 +19,7 @@
 <script>Babel.registerPreset('react',function(){return{plugins:[[Babel.availablePlugins['transform-react-jsx'],{runtime:'classic'}]]};});</script>
 <script type="text/babel">
 const {useState,useRef,useEffect}=React;
-const STUDIO_VERSION="0.5.6";
+const STUDIO_VERSION="0.5.7";
 const LS_LAST_SKIT="fyeox_last_skit_v3";
 const LS_CHAR_LIB="fyeox_char_lib_v3";
 const LS_PROP_LIB="fyeox_prop_lib_v1";
@@ -38,7 +38,32 @@ function fart(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain(),l=c.crea
 function bark(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="square";o.frequency.setValueAtTime(470,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(195,c.currentTime+t+0.2);g.gain.setValueAtTime(0,c.currentTime+t);g.gain.linearRampToValueAtTime(0.28,c.currentTime+t+0.01);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.24);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.28);}
 function thump(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="sine";o.frequency.setValueAtTime(145,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(26,c.currentTime+t+0.15);g.gain.setValueAtTime(0.6,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.18);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.22);}
 function playAudio(url){return new Promise(r=>{if(!url){r(false);return;}const a=new Audio(url);a.onended=()=>r(true);a.onerror=()=>r(false);a.play().catch(()=>r(false));});}
-function speakFallback(text,opts={}){return new Promise(r=>{if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=opts.pitch??1;u.rate=opts.rate??1;u.onend=r;u.onerror=()=>setTimeout(r,500);setTimeout(()=>window.speechSynthesis.speak(u),60);});}
+// ── Audio engine (shared: these functions are also copied into exported viewers via toString) ──
+// iOS notes: Web Audio is muted by the ring/silent switch unless the audio session is "playback";
+// speechSynthesis and AudioContext must be first used synchronously inside a tap.
+const SILENT_SRC="data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAACAE00QSBpc29taXNvMgAAAyttb292AAAAbG12aGQAAAAAAAAAAAAAAAAAAAPoAAAB9AABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAACVXRyYWsAAABcdGtoZAAAAAMAAAAAAAAAAAAAAAEAAAAAAAAB9AAAAAAAAAAAAAAAAQEAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAACRlZHRzAAAAHGVsc3QAAAAAAAAAAQAAAfQAAAQAAAEAAAAAAc1tZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAAFYiAAAvEVXEAAAAAAAtaGRscgAAAAAAAAAAc291bgAAAAAAAAAAAAAAAFNvdW5kSGFuZGxlcgAAAAF4bWluZgAAABBzbWhkAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAE8c3RibAAAAGpzdHNkAAAAAAAAAAEAAABabXA0YQAAAAAAAAABAAAAAAAAAAAAAQAQAAAAAFYiAAAAAAA2ZXNkcwAAAAADgICAJQABAASAgIAXQBUAAAAAAD6AAAADtwWAgIAFE4hW5QAGgICAAQIAAAAgc3R0cwAAAAAAAAACAAAACwAABAAAAAABAAADEQAAABxzdHNjAAAAAAAAAAEAAAABAAAADAAAAAEAAABEc3RzegAAAAAAAAAAAAAADAAAABUAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAAAQAAAAEAAAABAAAABRzdGNvAAAAAAAAAAEAAANXAAAAGnNncGQBAAAAcm9sbAAAAAIAAAAB//8AAAAcc2JncAAAAAByb2xsAAAAAQAAAAwAAAABAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAEltZGF03gIATGF2YzYwLjMxLjEwMgACMEAOARggBwEYIAcBGCAHARggBwEYIAcBGCAHARggBwEYIAcBGCAHARggBwEYIAc=";
+let _keepAlive=null,_curSrc=null;
+function unlockAudio(){
+  try{if(navigator.audioSession)navigator.audioSession.type="playback";}catch(e){}
+  try{if(!_keepAlive){_keepAlive=new Audio(SILENT_SRC);_keepAlive.loop=true;_keepAlive.setAttribute("playsinline","");}const p=_keepAlive.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
+  const c=ac();
+  try{const p=c.resume();if(p&&p.catch)p.catch(()=>{});}catch(e){}
+  try{const s=c.createBufferSource();s.buffer=c.createBuffer(1,1,22050);s.connect(c.destination);s.start(0);}catch(e){}
+  try{if(window.speechSynthesis){const u=new SpeechSynthesisUtterance(" ");u.volume=0;window.speechSynthesis.speak(u);}}catch(e){}
+}
+function releaseAudio(){try{if(_keepAlive)_keepAlive.pause();}catch(e){}}
+function b64ToArrayBuffer(b64){try{const bin=atob(b64.split(",")[1]);const u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);return u8.buffer;}catch(e){return null;}}
+function decodeAudio(buf){return new Promise(r=>{if(!buf){r(null);return;}try{const p=ac().decodeAudioData(buf,b=>r(b),()=>r(null));if(p&&p.then)p.then(r,()=>r(null));}catch(e){r(null);}});}
+function playBuffer(buf){return new Promise(r=>{if(!buf){r(false);return;}try{const c=ac(),s=c.createBufferSource();s.buffer=buf;s.connect(c.destination);_curSrc=s;s.onended=()=>{if(_curSrc===s)_curSrc=null;r(true);};s.start(0);}catch(e){r(false);}});}
+function stopAudio(){try{if(_curSrc)_curSrc.stop();}catch(e){}_curSrc=null;if(window.speechSynthesis)window.speechSynthesis.cancel();}
+function speakFallback(text,opts={}){return new Promise(r=>{
+  if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}
+  let done=false;const fin=()=>{if(done)return;done=true;clearTimeout(guard);r();};
+  // Guard: if iOS blocks speech, onend never fires, so never hang the skit.
+  const guard=setTimeout(fin,1500+text.length*80/Math.max(0.5,opts.rate??1));
+  window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=opts.pitch??1;u.rate=opts.rate??1;
+  u.onend=fin;u.onerror=()=>setTimeout(fin,300);window.speechSynthesis.speak(u);});}
+const AUDIO_ENGINE_FNS=[unlockAudio,releaseAudio,b64ToArrayBuffer,decodeAudio,playBuffer,stopAudio,speakFallback];
 function blobToB64(blob){return new Promise(r=>{const fr=new FileReader();fr.onloadend=()=>r(fr.result);fr.readAsDataURL(blob);});}
 function b64ToUrl(b64){try{const arr=b64.split(","),mime=arr[0].match(/:(.*?);/)[1],bstr=atob(arr[1]),u8=new Uint8Array(bstr.length);for(let i=0;i<bstr.length;i++)u8[i]=bstr.charCodeAt(i);return URL.createObjectURL(new Blob([u8],{type:mime}));}catch(e){return null;}}
 function serializeSkit(title,episode,characters,lines,audioB64Map,bgSrc){
@@ -680,7 +705,7 @@ function App(){
       document.documentElement.style.zoom="";
     };
   },[]);
-  const cancelRef=useRef(false);const appViewRef=useRef("welcome");
+  const runRef=useRef(0);const appViewRef=useRef("welcome");
   const [bgComp,setBgComp]=useState(null);
   const bgSrcRef=useRef("");
   useEffect(()=>{appViewRef.current=appView;},[appView]);
@@ -773,19 +798,27 @@ function App(){
     const rc=lines.filter(l=>l.recordable&&recordings[l.id]).length;
     const total=lines.filter(l=>l.recordable).length;
     if(rc===0&&total>0&&!window.confirm("No lines recorded yet — viewer will use robot voice (TTS). Export anyway?")){return;}
+    const iosRisk=Object.values(audioB64.current).filter(b=>/^data:audio\/(webm|ogg)/.test(b||"")).length;
+    if(iosRisk>0&&!window.confirm(iosRisk+" recording(s) are WebM/Ogg and may not play on iPhones/iPads. Re-record them in Safari (or a browser that records MP4) for best results. Export anyway?")){return;}
     downloadFile(buildViewerHTML(skitTitle,skitCharsRef.current,lines,audioB64.current,bgSrcRef.current),
       skitTitle.replace(/[^a-z0-9]/gi,"_").toLowerCase()+"_ep"+skitEpisode+"_viewer.html","text/html");
     showToast("🎬 Viewer exported!","#2ECC71");
   }
   function resetScene(){
-    cancelRef.current=true;if(previewRef.current)previewRef.current.pause();if(window.speechSynthesis)window.speechSynthesis.cancel();
+    runRef.current++;if(previewRef.current)previewRef.current.pause();stopAudio();releaseAudio();
     const m={},s={};Object.entries(skitCharsRef.current||{}).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});setCharModes(m);setCharStates(s);
     setBubble(null);setGas(false);setSFX(null);setPlaying(false);setPhase("idle");setCharParams({});setCharVisible({});setCharZOrder([]);
   }
   async function playSkit(){
-    if(playing)return;cancelRef.current=false;setPlaying(true);setPhase("playing");
+    if(playing)return;
+    unlockAudio(); // must run synchronously inside the Play tap (iOS)
+    const myRun=++runRef.current;setPlaying(true);setPhase("playing");
     const im={},is={};Object.entries(skitCharsRef.current||{}).forEach(([id,ch])=>{im[id]=ch.initial_mode||"idle";is[id]=ch.initial_state||null;});setCharModes(im);setCharStates(is);setBubble(null);setGas(false);setSFX(null);
-    const ok=()=>!cancelRef.current;
+    const ok=()=>runRef.current===myRun;
+    // Decode recordings into AudioBuffers (plays through Web Audio, which iOS allows after unlock)
+    const bufs={};
+    await Promise.all(linesRef.current.filter(l=>audioB64.current[l.id]).map(async l=>{bufs[l.id]=await decodeAudio(b64ToArrayBuffer(audioB64.current[l.id]));}));
+    if(!ok())return;
     for (const beat of linesRef.current) {
       if(!ok())break;
       if(beat.pre_delay){await wait(beat.pre_delay);if(!ok())break;}
@@ -804,7 +837,7 @@ function App(){
         if(ok())setBubble({who:beat.char,text:beat.text,type:beat.bubble,cx:bp.cx,cy:bp.cy,tailDir:bp.tailDir});
       }
       if(recordings[beat.id]){
-        const played=await playAudio(recordings[beat.id]);
+        const played=bufs[beat.id]?await playBuffer(bufs[beat.id]):await playAudio(recordings[beat.id]);
         if(!played){
           if(beat.bubble&&beat.text&&beat.tts)await speakFallback(beat.text,beat.tts);
           else if(beat.duration)await wait(beat.duration);
@@ -820,13 +853,15 @@ function App(){
       for(const eff of (beat.effects_after||[])){if(!ok())break;if(eff==="gas_off")setGas(false);}
       if(beat.post_delay){await wait(beat.post_delay);if(!ok())break;}
     }
-    if(ok()){setPlaying(false);setPhase("done");}
+    if(ok()){setPlaying(false);setPhase("done");releaseAudio();}
   }
   async function startRec(lineId){
+    let stream=null;
     try{
-      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      stream=await navigator.mediaDevices.getUserMedia({audio:true});
       chunksRef.current=[];
-      const mimeType=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
+      // Prefer AAC-in-MP4: it plays everywhere, including iPhones. WebM/Opus is unreliable on iOS.
+      const mimeType=['audio/mp4;codecs=mp4a.40.2','audio/mp4','audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
       const mr=mimeType?new MediaRecorder(stream,{mimeType}):new MediaRecorder(stream);
       mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
       mr.onstop=async()=>{
@@ -836,11 +871,11 @@ function App(){
       };
       mr.start();mediaRef.current=mr;setRecording(lineId);setRecTime(0);
       timerRef.current=setInterval(()=>setRecTime(t=>t+1),1000);
-    }catch(e){alert("Microphone access required.");}
+    }catch(e){if(stream)stream.getTracks().forEach(t=>t.stop());alert("Could not start recording.\n"+(e&&e.message||"Microphone access required."));}
   }
   function stopRec(){if(mediaRef.current&&mediaRef.current.state!=="inactive")mediaRef.current.stop();clearInterval(timerRef.current);setRecording(null);setRecTime(0);}
   function clearRec(id){if(recordings[id])URL.revokeObjectURL(recordings[id]);setRecordings(r=>{const n={...r};delete n[id];return n;});delete audioB64.current[id];scheduleAutoSave();}
-  function previewLine(url){if(previewRef.current)previewRef.current.pause();const a=new Audio(url);previewRef.current=a;a.play();}
+  function previewLine(url){if(previewRef.current)previewRef.current.pause();const a=new Audio(url);previewRef.current=a;a.play().catch(()=>showToast("⚠ This recording can't play in this browser — try re-recording","#FF8844"));}
   function changeLineText(id,text){setLines(prev=>{const n=prev.map(l=>l.id===id?{...l,text}:l);linesRef.current=n;return n;});}
   function resetLineText(id){const d=origLines.current.find(x=>x.id===id);if(d)changeLineText(id,d.text);}
   function changeLineMode(id,mode){
@@ -1054,13 +1089,12 @@ function buildViewerHTML(title,characters,lines,audioMap,bgSrc){
   }).replace(/</g,"\\u003c").replace(/>/g,"\\u003e").replace(/\//g,"\\u002f");
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>FYEOX \u2014 ${title}<\/title>
+<title>FYEOX \u2014 ${String(title).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}<\/title>
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
 <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"><\/script>
 <style>*{box-sizing:border-box;margin:0;padding:0;}body{background:#0d1520;font-family:'Comic Sans MS',cursive;display:flex;align-items:center;justify-content:center;min-height:100vh;}
 @keyframes rockSway{0%,100%{transform:rotate(0deg)}50%{transform:rotate(1.8deg)}}
-@keyframes backUp{0%{transform:translateX(0)}100%{transform:translateX(var(--bk-x,80px))}}
 @keyframes backUp{0%{transform:translateX(0)}100%{transform:translateX(var(--bk-x,80px))}}
 @keyframes caneShake{0%{transform:rotate(0deg)}25%{transform:rotate(-14deg)}75%{transform:rotate(14deg)}100%{transform:rotate(0deg)}}
 @keyframes barkShake{0%{transform:translate(0,0)}25%{transform:translate(-5px,-4px) rotate(-5deg)}75%{transform:translate(5px,3px) rotate(5deg)}100%{transform:translate(0,0)}}
@@ -1088,8 +1122,11 @@ const wt=ms=>new Promise(r=>setTimeout(r,ms));
 function fa(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain(),l=c.createOscillator(),lg=c.createGain();l.frequency.value=13;lg.gain.value=30;l.connect(lg);lg.connect(o.frequency);o.type="sawtooth";o.frequency.setValueAtTime(88,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(38,c.currentTime+t+0.6);g.gain.setValueAtTime(0.45,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.7);o.connect(g);g.connect(c.destination);l.start(c.currentTime+t);o.start(c.currentTime+t);l.stop(c.currentTime+t+0.7);o.stop(c.currentTime+t+0.7);}
 function bk(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="square";o.frequency.setValueAtTime(470,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(195,c.currentTime+t+0.2);g.gain.setValueAtTime(0,c.currentTime+t);g.gain.linearRampToValueAtTime(0.28,c.currentTime+t+0.01);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.24);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.28);}
 function th(t=0){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type="sine";o.frequency.setValueAtTime(145,c.currentTime+t);o.frequency.exponentialRampToValueAtTime(26,c.currentTime+t+0.15);g.gain.setValueAtTime(0.6,c.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+t+0.18);o.connect(g);g.connect(c.destination);o.start(c.currentTime+t);o.stop(c.currentTime+t+0.22);}
-function pa(id){return new Promise(r=>{const buf=ab.current[id];if(buf){const c=ac();const s=c.createBufferSource();s.buffer=buf;s.connect(c.destination);s.onended=()=>r(true);try{s.start(0);}catch(e){r(false);}return;}const url=au.current[id];if(!url){r(false);return;}const a=new Audio(url);a.onended=()=>r(true);a.onerror=()=>r(false);a.play().catch(()=>r(false));});}
-function sf(text,o={}){return new Promise(r=>{if(!window.speechSynthesis){setTimeout(r,text.length*70);return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.pitch=o.pitch??1;u.rate=o.rate??1;u.onend=r;u.onerror=()=>setTimeout(r,500);window.speechSynthesis.speak(u);});}
+const SILENT_SRC=${JSON.stringify(SILENT_SRC)};
+let _keepAlive=null,_curSrc=null;
+${AUDIO_ENGINE_FNS.map(f=>f.toString()).join("\n")}
+function pa(id){const buf=ab.current[id];if(buf)return playBuffer(buf);return new Promise(r=>{const url=au.current[id];if(!url){r(false);return;}const a=new Audio(url);a.onended=()=>r(true);a.onerror=()=>r(false);a.play().catch(()=>r(false));});}
+const sf=speakFallback;
 function b2u(b64){try{const a=b64.split(","),m=a[0].match(/:(.*?);/)[1],b=atob(a[1]),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return URL.createObjectURL(new Blob([u],{type:m}));}catch(e){return null;}}
 let _bgComp=null;
 if(D.bg_src){try{const _bc=Babel.transform("("+D.bg_src+")",{presets:[["react",{runtime:"classic"}]]}).code;_bgComp=eval(_bc);}catch(e){console.warn("bg fail",e);}}
@@ -1110,7 +1147,7 @@ function Viewer(){
   const [charZOrder,setCharZOrder]=useState([]);
   const [bub,setBub]=useState(null);const [gas,setGas]=useState(false);
   const [sfx,setSFX]=useState(null);const [play,setPlay]=useState(false);const [ph,setPh]=useState("idle");
-  const cr=useRef(false);
+  const run=useRef(0),busy=useRef(false),decoded=useRef(false);
   useEffect(()=>{
     const u={};
     Object.entries(AU).forEach(([id,b64])=>{
@@ -1126,21 +1163,22 @@ function Viewer(){
     return()=>Object.values(u).forEach(x=>URL.revokeObjectURL(x));
   },[]);
   function reset(){
-    cr.current=true;if(window.speechSynthesis)window.speechSynthesis.cancel();
+    run.current++;busy.current=false;stopAudio();releaseAudio();
     const m={},s={};Object.entries(CHARS).forEach(([id,ch])=>{m[id]=ch.initial_mode||"idle";s[id]=ch.initial_state||null;});
     setCharModes(m);setCharStates(s);setBub(null);setGas(false);setSFX(null);setPlay(false);setPh("idle");setCharVis({});setCharZOrder([]);
   }
   async function playSkit(){
-    if(play)return;
-    const _ac=ac();
-    try{await _ac.resume();}catch(e){}
-    if(Object.keys(ab.current).length===0){
+    if(busy.current)return;busy.current=true;
+    unlockAudio(); // synchronously inside the tap: unlocks Web Audio + speech on iOS, bypasses silent switch
+    const my=++run.current;const ok=()=>run.current===my;
+    setPlay(true);setPh("playing");
+    if(!decoded.current){
+      decoded.current=true;
       await Promise.all(Object.entries(rawAu.current).map(async([id,buf])=>{
-        try{ab.current[id]=await _ac.decodeAudioData(buf.slice(0));}catch(e){}
+        const b=await decodeAudio(buf.slice(0));if(b)ab.current[id]=b;
       }));
     }
-    cr.current=false;setPlay(true);setPh("playing");
-    const ok=()=>!cr.current;
+    if(!ok())return;
     for (const beat of LN){
       if(!ok())break;
       if(beat.pre_delay){await wt(beat.pre_delay);if(!ok())break;}
@@ -1175,7 +1213,7 @@ function Viewer(){
       for(const eff of (beat.effects_after||[])){if(!ok())break;if(eff==="gas_off")setGas(false);}
       if(beat.post_delay){await wt(beat.post_delay);if(!ok())break;}
     }
-    if(ok()){setPlay(false);setPh("done");}
+    if(ok()){setPlay(false);setPh("done");busy.current=false;releaseAudio();}
   }
   const S={fontFamily:"'Comic Sans MS',cursive"};
   return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"radial-gradient(ellipse at top,#1a2838,#0d1520)",padding:16,...S}}>
