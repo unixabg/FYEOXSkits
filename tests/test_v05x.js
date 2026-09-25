@@ -243,8 +243,14 @@ check('backUp keyframe in style.css or inline',
   studioSrc.includes('@keyframes backUp')||html.includes('style.css'));
 check('backUp uses CSS custom property var --bk-x',
   html.includes('var(--bk-x,'));
-check('STUDIO_VERSION is 0.5.7',
-  html.includes('STUDIO_VERSION="0.5.7"'));
+// Version sync: bump with scripts/bump-version.sh so these stay in lockstep.
+const _studioVer=(html.match(/const STUDIO_VERSION="([0-9.]+)"/)||[])[1];
+check('STUDIO_VERSION declared', !!_studioVer, `got: ${_studioVer}`);
+check('SkitStudio header comment matches STUDIO_VERSION',
+  html.includes('SkitStudio v'+_studioVer), `STUDIO_VERSION=${_studioVer}`);
+const _indexVer=(()=>{try{return (fs.readFileSync(path.join(path.dirname(file),'index.html'),'utf8').match(/const STUDIO_VERSION="([0-9.]+)"/)||[])[1];}catch(e){return undefined;}})();
+check('index.html STUDIO_VERSION matches SkitStudio.html',
+  _indexVer===_studioVer, `index.html=${_indexVer} SkitStudio.html=${_studioVer}`);
 
 // ── 29. v0.5.4 — prop system ──────────────────────────────────────────────
 check('LS_PROP_LIB constant declared',

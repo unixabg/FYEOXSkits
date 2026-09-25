@@ -30,7 +30,8 @@ Then open `SkitStudio.html` in any modern browser — all characters are include
 | `SkitStudio.html` | Main skit authoring tool |
 | `CharacterStudio.html` | Character editor |
 | `style.css` | Shared stylesheet — must be in the same folder as the HTML files |
-| `test_v050.js` | Test suite: `node test_v050.js SkitStudio.html` |
+| `tests/test_v05x.js` | Test suite: `node tests/test_v05x.js SkitStudio.html` |
+| `scripts/bump-version.sh` | Bumps the studio version in `SkitStudio.html` and `index.html` together |
 | `*.char` | Character definition files |
 | `*.skit` | Saved skit files |
 
@@ -151,9 +152,23 @@ Have an idea for a feature, a custom character, or a branded skit experience?
 ## Running the Test Suite
 
 ```bash
-node test_v050.js SkitStudio.html
-# Expected: 184/184 passing
+node tests/test_v05x.js SkitStudio.html
+# Expected: all checks passing
 ```
+
+The suite also runs on every push and pull request (GitHub Actions).
+
+---
+
+## Bumping the Version
+
+The studio version lives in both `SkitStudio.html` (header comment + `STUDIO_VERSION`) and `index.html` (starter pack). Always bump them together:
+
+```bash
+scripts/bump-version.sh 0.5.8
+```
+
+The test suite fails if `index.html` and `SkitStudio.html` disagree.
 
 ---
 
